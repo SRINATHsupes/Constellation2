@@ -519,10 +519,7 @@ export default function VedicEscape() {
 
     if (nearDoor && doorOpen) {
       router.replace(
-        `/play/vedic-escape?level=${Math.min(
-          4,
-          level + 1,
-        )}`,
+        `/games/vedic?completed=${level}`,
       );
     }
   };

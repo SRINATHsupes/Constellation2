@@ -1,2567 +1,1287 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Dimensions,
-  Image,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAudioPlayer } from 'expo-audio';
-import { SvgUri } from 'react-native-svg';
-import VisualLesson from '@/features/lessons/VisualLesson';
-import { LESSON_CONTENT } from '@/features/lessons/lesson-content';
+import Svg, { Circle, Path } from 'react-native-svg';
 
-import { collectStar } from '@/features/stars/star-store';
-import VedicEscape from '@/features/rooms/games/VedicEscape';
-import MaterialsGame from '@/features/rooms/games/manufacturing/MaterialsGame';
-import ToolsGame from '@/features/rooms/games/manufacturing/ToolsGame';
-import MachinesGame from '@/features/rooms/games/manufacturing/MachinesGame';
-import GearsGame from '@/features/rooms/games/manufacturing/GearsGame';
-import ProductionLineGame from '@/features/rooms/games/manufacturing/ProductionLineGame';
-import QualityInspectorGame from '@/features/rooms/games/manufacturing/QualityInspectorGame';
-import WaterLogicGame from '@/features/rooms/games/electronics/WaterLogicGame';
-import ComplexPipesGame from '@/features/rooms/games/electronics/ComplexPipesGame';
-import LogicGateGame from '@/features/rooms/games/electronics/LogicGateGame';
-import CircuitRepairGame from '@/features/rooms/games/electronics/CircuitRepairGame';
-import BinaryGame from '@/features/rooms/games/electronics/BinaryGame';
-import BinaryCodeGame from '@/features/rooms/games/electronics/BinaryCodeGame';
+type SubjectId = 'vedic' | 'arts' | 'manufacturing';
 
-
-
-const { width } = Dimensions.get('window');
-
-type Stage = 'learn' | 'experiment' | 'game' | 'build' | 'mission' | 'complete';
+type LevelState = 'completed' | 'current' | 'locked';
 
 type Level = {
-  id: string;
+  number: number;
+  title: string;
+  description: string;
+  object: string;
+  concept: string;
+  state: LevelState;
+  route?: string;
+};
+
+type SubjectConfig = {
   title: string;
   subtitle: string;
-  learn: string[];
-  experiment: string;
-  game: string;
-  build: string;
-  mission: string;
-};
-
-type Theme = {
-  colors: readonly [string, string, string];
   accent: string;
-  icon: string;
+  accentLight: string;
+  levels: {
+    title: string;
+    description: string;
+    object: string;
+    concept: string;
+    route?: string;
+  }[];
 };
 
-const THEMES: Record<string, Theme> = {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const MAP_WIDTH = Math.max(SCREEN_WIDTH, 360);
+const MAP_HEIGHT = 920;
+
+const SUBJECTS: Record<SubjectId, SubjectConfig> = {
   vedic: {
-    colors: ['#070B2A', '#32105E', '#1168C7'],
-    accent: '#BFA2FF',
-    icon: '∿',
+    title: 'Vedic Maths',
+    subtitle: 'Numbers · Patterns · Mental Power',
+    accent: '#9B83D7',
+    accentLight: '#DCD1F0',
+
+    levels: [
+      {
+        title: 'Number Sense',
+        description: 'See numbers as patterns, not just symbols.',
+        object: '123',
+        concept: 'NUMBER PATTERN',
+        route: '/play/vedic-escape?level=1',
+      },
+      {
+        title: 'Number Patterns',
+        description: 'Discover structure hidden inside numbers.',
+        object: '×',
+        concept: 'MULTIPLY',
+        route: '/play/vedic-escape?level=2',
+      },
+      {
+        title: 'Fast Calculation',
+        description: 'Use clever patterns to calculate mentally.',
+        object: '÷',
+        concept: 'DIVIDE',
+        route: '/play/vedic-escape?level=3',
+      },
+      {
+        title: 'Vedic Challenge',
+        description: 'Combine the ideas from the journey.',
+        object: '∑',
+        concept: 'COMBINE',
+        route: '/play/vedic-escape?level=4',
+      },
+      {
+        title: 'Number Escape',
+        description: 'Use mathematical thinking to escape the room.',
+        object: '99',
+        concept: 'MASTER',
+      },
+    ],
   },
+
   arts: {
-    colors: ['#26072F', '#9C2467', '#F07842'],
-    accent: '#FFD166',
-    icon: '✎',
+    title: 'Drawing & Arts',
+    subtitle: 'Draw · Shape · Imagine',
+    accent: '#E98FA3',
+    accentLight: '#F4CBD5',
+
+    levels: [
+      {
+        title: 'Lines & Shapes',
+        description: 'Turn simple marks into shapes and pictures.',
+        object: '✎',
+        concept: 'LINE',
+        route: '/play/arts-drawing',
+      },
+      {
+        title: 'Shape Builder',
+        description: 'Combine shapes to create something new.',
+        object: '△',
+        concept: 'SHAPE',
+        route: '/play/arts-drawing?level=2',
+      },
+      {
+        title: 'Color Workshop',
+        description: 'Explore color, balance and visual patterns.',
+        object: '●',
+        concept: 'COLOR',
+        route: '/play/arts-drawing?level=3',
+      },
+      {
+        title: 'Picture Puzzle',
+        description: 'Solve a visual puzzle using imagination.',
+        object: '◯',
+        concept: 'COMPOSE',
+        route: '/play/arts-drawing?level=4',
+      },
+      {
+        title: 'Creative Challenge',
+        description: 'Bring your ideas together into a final creation.',
+        object: '✦',
+        concept: 'CREATE',
+        route: '/play/arts-drawing?level=5',
+      },
+    ],
   },
-  physics: {
-    colors: ['#06142E', '#243B83', '#613ED1'],
-    accent: '#7DE7FF',
-    icon: '◌',
-  },
-  electronics: {
-    colors: ['#020713', '#063E63', '#612CFF'],
-    accent: '#53E8FF',
-    icon: '⚡',
-  },
-  nutrition: {
-    colors: ['#061E18', '#08634E', '#B58C27'],
-    accent: '#B9F27C',
-    icon: '◒',
-  },
+
   manufacturing: {
-    colors: ['#091321', '#19456A', '#A65C2D'],
-    accent: '#FFB86B',
-    icon: '⚙',
-  },
-  music: {
-    colors: ['#160827', '#522078', '#D13B9C'],
-    accent: '#FFB7F0',
-    icon: '♫',
-  },
-  humanity: {
-    colors: ['#07152C', '#49305F', '#B75C68'],
-    accent: '#FFD2B8',
-    icon: '♡',
-  },
-  nature: {
-    colors: ['#031812', '#096048', '#168C72'],
-    accent: '#9EF2B5',
-    icon: '❧',
+    title: 'Manufacturing',
+    subtitle: 'Machines · Motion · Engineering',
+    accent: '#D99461',
+    accentLight: '#F0C8AA',
+
+    levels: [
+      {
+        title: 'Gear Machine',
+        description: 'Transfer motion from one gear to another.',
+        object: '⚙',
+        concept: 'MOTION',
+        route: '/play/manufacturing?level=1',
+      },
+      {
+        title: 'Bicycle Workshop',
+        description: 'Build a bicycle from separate parts.',
+        object: '🚲',
+        concept: 'ASSEMBLY',
+        route: '/play/manufacturing?level=2',
+      },
+      {
+        title: 'Motor Lab',
+        description: 'Turn electrical energy into mechanical motion.',
+        object: '◉',
+        concept: 'ENERGY',
+        route: '/play/manufacturing?level=3',
+      },
+      {
+        title: 'Motorcycle Workshop',
+        description: 'Assemble a complete working machine.',
+        object: '🏍',
+        concept: 'SYSTEM',
+        route: '/play/manufacturing?level=4',
+      },
+      {
+        title: 'Advanced Robot Lab',
+        description: 'Build an articulated robotic machine.',
+        object: '🤖',
+        concept: 'ROBOTICS',
+        route: '/play/manufacturing?level=5',
+      },
+    ],
   },
 };
 
-const LEVELS: Record<string, Level[]> = {
-  vedic: [
-  {
-    id: 'vedic-number-sense-01',
-    title: 'Number Relationships',
-    subtitle: 'See how numbers connect',
-    learn: [
-      'Numbers are not isolated; they have relationships with other numbers.',
-      'Place value helps us understand what each digit represents.',
-      'Seeing these relationships makes mental calculation easier.',
-    ],
-    experiment: 'Move digits around and observe how the value of a number changes.',
-    game: 'Connect numbers that have the relationship shown by the chamber.',
-    build: 'Write a few numbers and mark the tens and ones.',
-    mission: 'Notice one number relationship in everyday life today.',
-  },
-  {
-    id: 'vedic-number-sense-02',
-    title: 'Complements',
-    subtitle: 'Discover the number that completes another',
-    learn: [
-      'A complement is the amount needed to reach a chosen base.',
-      'For 8 and 10, the complement of 8 is 2.',
-      'Complements can make mental calculations much faster.',
-    ],
-    experiment: 'Change a number and watch its complement to 10 or 100 appear.',
-    game: 'Find the missing number that completes the base.',
-    build: 'Make your own complement pairs for 10 and 100.',
-    mission: 'Use complements when making a quick calculation today.',
-  },
-  {
-    id: 'vedic-number-sense-03',
-    title: 'Mental Estimation',
-    subtitle: 'Think about the answer before calculating',
-    learn: [
-      'Estimation gives us a quick idea of what an answer should be.',
-      'Nearby numbers can make difficult calculations easier to imagine.',
-      'A good estimate helps us notice unreasonable answers.',
-    ],
-    experiment: 'Move numbers closer to simple values and compare the estimate.',
-    game: 'Choose the answer range that the calculation should fall into.',
-    build: 'Estimate the total of a few safe everyday objects.',
-    mission: 'Estimate a price or quantity before checking the actual value.',
-  },
+function createLevels(
+  subject: SubjectId,
+  completedLevel: number,
+): Level[] {
+  return SUBJECTS[subject].levels.map((item, index) => {
+    const number = index + 1;
 
-  {
-    id: 'vedic-near-base-01',
-    title: 'Base 10',
-    subtitle: 'Discover numbers close to a base',
-    learn: [
-      'A base gives us a convenient number to calculate around.',
-      '10 is a simple base for small numbers.',
-      'Thinking around a base can simplify multiplication.',
-    ],
-    experiment: 'Move numbers around 10 and observe their distance from the base.',
-    game: 'Use the base to solve the multiplication chamber.',
-    build: 'Write numbers near 10 and mark how far each is from it.',
-    mission: 'Find a calculation where using 10 as a reference helps.',
-  },
-  {
-    id: 'vedic-near-base-02',
-    title: 'Base 100',
-    subtitle: 'Work with numbers near 100',
-    learn: [
-      'The same base idea can be used with 100.',
-      '98 is two below 100, while 103 is three above 100.',
-      'These differences become useful parts of a Vedic calculation.',
-    ],
-    experiment: 'Move numbers around 100 and reveal their differences from the base.',
-    game: 'Solve near-100 multiplication using the displayed differences.',
-    build: 'Create three numbers close to 100 and write their differences.',
-    mission: 'Use a near-100 estimate when checking an everyday calculation.',
-  },
-  {
-    id: 'vedic-near-base-03',
-    title: 'Nikhilam',
-    subtitle: 'Multiply quickly using the base',
-    learn: [
-      'Nikhilam uses a nearby base and the differences from that base.',
-      'Numbers such as 98 and 97 are both close to 100.',
-      'The method turns the calculation into smaller parts.',
-    ],
-    experiment: 'Watch 98 and 97 move around the base 100 and reveal their differences.',
-    game: 'Open the lock by solving near-100 multiplication with Nikhilam.',
-    build: 'Write one near-base multiplication and show the differences.',
-    mission: 'Use a simple near-base calculation in a real-world estimate.',
-  },
+    let state: LevelState;
 
-  {
-    id: 'vedic-crosswise-01',
-    title: 'Vertical',
-    subtitle: 'Build multiplication from the place values',
-    learn: [
-      'Multiplication can be built from separate place-value parts.',
-      'Vertical multiplication begins with corresponding digits.',
-      'The pieces can then be combined into one answer.',
-    ],
-    experiment: 'Separate two numbers into their place-value parts and recombine them.',
-    game: 'Complete the vertical calculation one part at a time.',
-    build: 'Draw the place-value structure of a two-digit multiplication.',
-    mission: 'Break one multiplication into smaller parts before solving it.',
-  },
-  {
-    id: 'vedic-crosswise-02',
-    title: 'Crosswise',
-    subtitle: 'Let the digits work across each other',
-    learn: [
-      'Crosswise multiplication combines products from different digit positions.',
-      'Each digit contributes to more than one part of the answer.',
-      'The method creates a structured mental calculation.',
-    ],
-    experiment: 'Animate the vertical and crosswise paths between the digits.',
-    game: 'Follow the correct crosswise paths to unlock the answer.',
-    build: 'Draw arrows showing the crosswise multiplication paths.',
-    mission: 'Try explaining the crosswise idea using your own drawing.',
-  },
-  {
-    id: 'vedic-crosswise-03',
-    title: 'Urdhva Tiryak',
-    subtitle: 'Use the vertical-and-crosswise method',
-    learn: [
-      'Urdhva Tiryak means a vertical-and-crosswise approach.',
-      'The method organizes multiplication into a sequence of partial products.',
-      'The same structure can extend to larger numbers.',
-    ],
-    experiment: 'Watch the multiplication build from right to left.',
-    game: 'Repair the calculation by placing each partial product correctly.',
-    build: 'Create your own two-digit Urdhva Tiryak diagram.',
-    mission: 'Use the method on a small multiplication and explain the steps.',
-  },
+    if (number <= completedLevel) {
+      state = 'completed';
+    } else if (number === completedLevel + 1) {
+      state = 'current';
+    } else {
+      state = 'locked';
+    }
 
-  {
-    id: 'vedic-mental-01',
-    title: 'Yavadunam',
-    subtitle: 'Use the amount a number is away',
-    learn: [
-      'Yavadunam uses how much a number differs from a nearby base.',
-      'The difference can become part of a faster calculation.',
-      'The idea is especially useful with numbers close to a base.',
-    ],
-    experiment: 'Move a number toward a base and watch its difference change.',
-    game: 'Use the difference from the base to open the mental-maths lock.',
-    build: 'Draw a number, its base and the difference between them.',
-    mission: 'Look for a number close to 10 or 100 and identify its difference.',
-  },
-  {
-    id: 'vedic-mental-02',
-    title: 'Antyayordashakepi',
-    subtitle: 'Discover a special ending pattern',
-    learn: [
-      'Some Vedic methods use relationships between the final digits.',
-      'Antyayordashakepi is associated with numbers whose final digits combine to 10.',
-      'Recognising the pattern can simplify particular calculations.',
-    ],
-    experiment: 'Change the final digits and observe when the pattern becomes active.',
-    game: 'Find the pair whose final digits satisfy the required pattern.',
-    build: 'Create several pairs whose final digits add to 10.',
-    mission: 'Look for a real calculation where a useful ending pattern appears.',
-  },
-  {
-    id: 'vedic-mental-03',
-    title: 'Fast Calculation',
-    subtitle: 'Choose the right mental pathway',
-    learn: [
-      'Different calculations can benefit from different mental strategies.',
-      'The goal is not one trick for everything.',
-      'Good mental maths means recognising which structure is useful.',
-    ],
-    experiment: 'Try the same calculation using two different mental pathways.',
-    game: 'Choose the pathway that makes the calculation simplest.',
-    build: 'Write down your own fastest method for a small calculation.',
-    mission: 'Solve one everyday calculation mentally before reaching for a calculator.',
-  },
-
-  {
-    id: 'vedic-patterns-01',
-    title: 'Number Patterns',
-    subtitle: 'Discover what changes and what stays',
-    learn: [
-      'Numbers can follow repeating or growing patterns.',
-      'A pattern can help us predict the next value.',
-      'Finding the rule is more important than memorising the sequence.',
-    ],
-    experiment: 'Change the pattern rule and watch the sequence grow.',
-    game: 'Repair the broken number pattern.',
-    build: 'Create your own short number pattern.',
-    mission: 'Find a number pattern in something you see today.',
-  },
-  {
-    id: 'vedic-patterns-02',
-    title: 'Relationships',
-    subtitle: 'Find the hidden connection',
-    learn: [
-      'Mathematical relationships describe how numbers change together.',
-      'The same relationship can appear in different forms.',
-      'Recognising a relationship helps us calculate and predict.',
-    ],
-    experiment: 'Change one number and observe how the related number responds.',
-    game: 'Discover the hidden rule connecting the number pairs.',
-    build: 'Draw three number pairs that follow one rule.',
-    mission: 'Explain one number relationship to another person.',
-  },
-  {
-    id: 'vedic-patterns-03',
-    title: 'Algebra Patterns',
-    subtitle: 'Turn number patterns into rules',
-    learn: [
-      'A pattern can be described using a rule.',
-      'A letter can represent a number that changes.',
-      'This is the beginning of algebraic thinking.',
-    ],
-    experiment: 'Change the input and watch the rule produce a new output.',
-    game: 'Discover the rule that controls the number machine.',
-    build: 'Create a simple input-and-output number machine.',
-    mission: 'Find a repeating or changing rule in everyday life.',
-  },
-
-  {
-    id: 'vedic-real-world-01',
-    title: 'Shopping',
-    subtitle: 'Use mental maths with prices',
-    learn: [
-      'Mental calculation can help us estimate shopping totals.',
-      'Grouping prices can make addition easier.',
-      'Estimation helps us check whether a total makes sense.',
-    ],
-    experiment: 'Add several item prices and compare the exact total with an estimate.',
-    game: 'Reach the correct shopping total before the timer closes the checkout.',
-    build: 'Make a small pretend shopping list and calculate the total.',
-    mission: 'Estimate the total of a few items before checking the receipt.',
-  },
-  {
-    id: 'vedic-real-world-02',
-    title: 'Money',
-    subtitle: 'Calculate change and totals',
-    learn: [
-      'Complements can help calculate change quickly.',
-      'Breaking a price into simple amounts can make mental calculation easier.',
-      'Checking the answer helps prevent mistakes.',
-    ],
-    experiment: 'Give a virtual payment and watch the change build back to the price.',
-    game: 'Return the correct change using the fewest mental steps.',
-    build: 'Practise making change with safe pretend money.',
-    mission: 'Notice how change is calculated during a real purchase with a grown-up.',
-  },
-  {
-    id: 'vedic-real-world-03',
-    title: 'Estimation',
-    subtitle: 'Use numbers to make quick decisions',
-    learn: [
-      'Estimation is useful when an exact answer is not necessary.',
-      'A good estimate should be close enough for the purpose.',
-      'Mental maths helps us make quick everyday comparisons.',
-    ],
-    experiment: 'Compare exact values with rounded estimates and see how close they are.',
-    game: 'Choose the estimate that is useful enough for the situation.',
-    build: 'Estimate the number of objects in a small group, then count them.',
-    mission: 'Make one useful estimate today and check it afterward.',
-  },
-],
-
-nutrition: [
-    {
-      id: 'nutrition-01',
-      title: 'Food Explorer',
-      subtitle: 'What does food give us?',
-      learn: [
-        'Food gives the body energy and nutrients needed for normal growth and everyday functions.',
-        'Different foods provide different combinations of carbohydrates, proteins, fats, vitamins, minerals, and fibre.',
-        'A varied diet is more useful than relying on one “perfect” food.',
-      ],
-      experiment: 'Move foods into groups and watch the plate become more varied.',
-      game: 'Build a varied meal from the available foods.',
-      build: 'Draw your own balanced meal using foods you actually eat.',
-      mission: 'Look at one family meal and identify several different food groups.',
-    },
-    {
-      id: 'nutrition-02',
-      title: 'Vitamin & Mineral Lab',
-      subtitle: 'Small nutrients, important jobs',
-      learn: [
-        'Vitamins and minerals help the body perform many normal functions.',
-        'For example, calcium supports bones and teeth, iron is needed for haemoglobin, and vitamin C has several roles including supporting normal connective tissue formation.',
-        'Different foods provide different micronutrients.',
-      ],
-      experiment: 'Connect nutrients to their body roles and food sources.',
-      game: 'Run the nutrient laboratory by matching each nutrient to suitable sources.',
-      build: 'Make a simple nutrient chart using foods available at home.',
-      mission: 'Find three foods and identify one nutrient each commonly provides.',
-    },
-    {
-      id: 'nutrition-03',
-      title: 'Food Detective',
-      subtitle: 'Look beyond the front of the packet',
-      learn: [
-        'Highly processed foods can contain substantial added sugar, sodium, or saturated fat.',
-        'The front of a package does not tell the whole story.',
-        'Learning to compare ingredients and nutrition information helps us make informed choices.',
-      ],
-      experiment: 'Reveal the hidden information on several imaginary food packages.',
-      game: 'Inspect labels and identify which foods need closer attention.',
-      build: 'Create a pretend food label for a snack.',
-      mission: 'With an adult, compare two real packaged foods using their labels.',
-    },
-    {
-      id: 'nutrition-04',
-      title: 'Build a Balanced Plate',
-      subtitle: 'Design the meal',
-      learn: [
-        'A useful meal can combine vegetables or fruits, protein-rich foods, grains or other carbohydrate sources, and suitable fats.',
-        'The exact meal can vary with culture, availability, age, and dietary needs.',
-        'Variety matters across the day, not just in one plate.',
-      ],
-      experiment: 'Assemble a plate and see how changing one component changes the overall variety.',
-      game: 'Complete the meal-building challenge.',
-      build: 'Design a real meal that your family could prepare.',
-      mission: 'Help an adult choose or prepare one component of a family meal.',
-    },
-    {
-      id: 'nutrition-05',
-      title: 'Label Detective',
-      subtitle: 'Understand the numbers',
-      learn: [
-        'Serving size tells you what amount the listed numbers refer to.',
-        'Sugar, sodium, protein, fat, fibre, and energy can all appear on a label.',
-        'Comparisons only make sense when the serving amounts are considered.',
-      ],
-      experiment: 'Change the serving size and watch the calculated amount change.',
-      game: 'Solve a supermarket label investigation.',
-      build: 'Make your own fictional label and calculate two serving amounts.',
-      mission: 'Read one real food label with an adult and identify its serving size.',
-    },
-    {
-      id: 'nutrition-06',
-      title: 'Kitchen Mission',
-      subtitle: 'Knowledge becomes action',
-      learn: [
-        'Nutrition becomes practical when you can use what you learned while planning and preparing food.',
-        'Kitchen safety matters: ask an adult before using knives, heat, appliances, or unfamiliar equipment.',
-      ],
-      experiment: 'Arrange a safe preparation sequence from ingredients to finished food.',
-      game: 'Complete the virtual kitchen workflow.',
-      build: 'Plan a simple nutritious snack or meal with an adult.',
-      mission: 'Actually prepare one safe food item with adult supervision.',
-    },
-  ],
-
-  physics: [
-    {
-      id: 'physics-01',
-      title: 'Motion',
-      subtitle: 'Things change position',
-      learn: [
-        'Motion means an object changes position relative to a reference point.',
-        'Speed describes how quickly position changes.',
-        'A moving object can speed up, slow down, or change direction.',
-      ],
-      experiment: 'Drag the object and change its speed. Watch its position change.',
-      game: 'Guide a rover through checkpoints while controlling its motion.',
-      build: 'Make a simple paper ramp and test a small object on it.',
-      mission: 'Observe something moving and describe how its position changes.',
-    },
-    {
-      id: 'physics-02',
-      title: 'Force',
-      subtitle: 'Pushes and pulls',
-      learn: [
-        'A force is a push or pull.',
-        'Forces can change an object’s motion.',
-        'A stronger push does not always produce the same result because mass and other forces matter.',
-      ],
-      experiment: 'Push objects with different strengths and observe their motion.',
-      game: 'Move objects to targets using controlled pushes.',
-      build: 'Test how far different objects travel from the same push.',
-      mission: 'Find three pushes or pulls used in everyday life.',
-    },
-    {
-      id: 'physics-03',
-      title: 'Friction',
-      subtitle: 'Surfaces resist sliding',
-      learn: [
-        'Friction acts between surfaces in contact.',
-        'Roughness, materials, and the force pressing surfaces together can affect friction.',
-        'Friction can be useful, such as when walking or braking, and can also waste energy.',
-      ],
-      experiment: 'Change the surface and slide the same object.',
-      game: 'Choose surfaces that let a machine move safely.',
-      build: 'Test the same object on two or three surfaces.',
-      mission: 'Find one place where friction helps and one where it causes a problem.',
-    },
-    {
-      id: 'physics-04',
-      title: 'Gravity',
-      subtitle: 'Falling and weight',
-      learn: [
-        'Gravity attracts objects toward Earth.',
-        'Gravity gives falling objects acceleration when other effects do not dominate.',
-        'A ramp lets us change the direction and distance over which an object moves downward.',
-      ],
-      experiment: 'Change the ramp angle and observe the object’s motion.',
-      game: 'Guide falling objects safely through a gravity maze.',
-      build: 'Make a paper ramp and test different angles.',
-      mission: 'Observe a falling or rolling object and describe what gravity is doing.',
-    },
-    {
-      id: 'physics-05',
-      title: 'Energy',
-      subtitle: 'Energy changes form',
-      learn: [
-        'Energy can be transferred and transformed.',
-        'A battery can transfer electrical energy; a moving object has kinetic energy; a raised object has gravitational potential energy.',
-        'Machines often involve several energy transformations.',
-      ],
-      experiment: 'Trace energy through a simple machine.',
-      game: 'Repair an energy-transfer chain by connecting the correct stages.',
-      build: 'Draw one everyday energy transformation.',
-      mission: 'Identify three energy transformations around your home.',
-    },
-    {
-      id: 'physics-06',
-      title: 'Momentum',
-      subtitle: 'Motion carried by mass',
-      learn: [
-        'Momentum depends on mass and velocity.',
-        'Changing mass or velocity changes momentum.',
-        'Collisions transfer momentum between objects.',
-      ],
-      experiment: 'Change the mass and speed of two carts and observe their collision.',
-      game: 'Control carts to transfer momentum safely.',
-      build: 'Make a simple rolling-cart experiment using safe household objects.',
-      mission: 'Observe a collision in sport or everyday life and describe the motion before and after.',
-    },
-    {
-      id: 'physics-07',
-      title: 'Machines',
-      subtitle: 'Put physics together',
-      learn: [
-        'Real machines combine forces, motion, friction, energy, and materials.',
-        'A lever, wheel, gear, ramp, or pulley can change how a force is applied.',
-        'Engineering is about choosing a useful arrangement for a purpose.',
-      ],
-      experiment: 'Change a machine’s parts and observe what happens.',
-      game: 'Build a working machine from the available components.',
-      build: 'Design a simple paper or household-object machine.',
-      mission: 'Find one machine at home and explain what physics ideas it uses.',
-    },
-  ],
-
-  electronics: [
-    {
-      id: 'electronics-01',
-      title: 'Water Logic',
-      subtitle: 'Open and blocked',
-      learn: [
-        'Imagine a pipe carrying water.',
-        'An open path lets water through. We can represent that state as 1.',
-        'A blocked path stops the flow. We can represent that state as 0.',
-      ],
-      experiment: 'Open and close virtual valves and watch the water flow.',
-      game: 'Route water through the correct pipe network.',
-      build: 'Draw a pipe system with open and blocked paths.',
-      mission: 'Find switches around you and think about how they create two states.',
-    },
-    {
-      id: 'electronics-02',
-      title: 'Complex Pipes',
-      subtitle: 'Combining conditions',
-      learn: [
-        'Several open and blocked paths can create more complicated behaviour.',
-        'The arrangement of paths determines whether water can reach the output.',
-        'This is a useful bridge from physical flow to logical circuits.',
-      ],
-      experiment: 'Change several valves and observe which routes remain connected.',
-      game: 'Solve increasingly complex water networks.',
-      build: 'Design a small two-input pipe puzzle.',
-      mission: 'Explain a real system where several conditions must be satisfied before something works.',
-    },
-    {
-      id: 'electronics-03',
-      title: 'Logic Gates',
-      subtitle: 'AND, OR, NOT',
-      learn: [
-        'AND needs both inputs to be 1.',
-        'OR needs at least one input to be 1.',
-        'NOT reverses the input.',
-      ],
-      experiment: 'Toggle the inputs and watch each gate respond.',
-      game: 'Connect gates to make the required output.',
-      build: 'Draw an AND, OR, and NOT gate using simple symbols.',
-      mission: 'Find an everyday decision that behaves like an AND or OR condition.',
-    },
-    {
-      id: 'electronics-04',
-      title: 'Circuits',
-      subtitle: 'A complete electrical path',
-      learn: [
-        'A circuit needs a complete path for current to flow.',
-        'A source provides electrical energy, while components use or control it.',
-        'An open circuit breaks the path.',
-      ],
-      experiment: 'Connect a source, switch, and lamp until the circuit works.',
-      game: 'Repair a broken circuit.',
-      build: 'With an adult and safe low-voltage parts, assemble a simple circuit.',
-      mission: 'Identify the source, path, control, and load in a safe electronic device.',
-    },
-    {
-      id: 'electronics-05',
-      title: 'Binary',
-      subtitle: 'Numbers made from two states',
-      learn: [
-        'Digital systems often represent information using two states.',
-        'Binary uses 0 and 1.',
-        'Different positions represent different powers of two.',
-      ],
-      experiment: 'Toggle binary switches and watch the decimal value change.',
-      game: 'Decode binary signals.',
-      build: 'Make a paper binary switch board.',
-      mission: 'Encode a small number in binary.',
-    },
-    {
-      id: 'electronics-06',
-      title: 'From Binary to Code',
-      subtitle: 'Computers represent information',
-      learn: [
-        'Computers store and process information using digital representations.',
-        'Character encodings map symbols to numbers.',
-        'For example, in ASCII, lowercase and uppercase letters have specific numeric codes.',
-      ],
-      experiment: 'Change a character and inspect its numeric representation.',
-      game: 'Decode a short computer message.',
-      build: 'Create a tiny ASCII code chart.',
-      mission: 'Encode one letter, such as A, using its ASCII value and explain the idea.',
-    },
-  ],
-
-  manufacturing: [
-    {
-      id: 'manufacturing-01',
-      title: 'Materials',
-      subtitle: 'Everything starts somewhere',
-      learn: [
-        'Manufactured objects begin with materials chosen for particular properties.',
-        'Metals, plastics, wood, ceramics, and composites behave differently.',
-      ],
-      experiment: 'Compare materials for strength, flexibility, weight, and heat resistance.',
-      game: 'Choose materials for different products.',
-      build: 'Collect safe household examples of three different materials.',
-      mission: 'Identify why one material was chosen for an everyday object.',
-    },
-    {
-      id: 'manufacturing-02',
-      title: 'Tools',
-      subtitle: 'Changing material',
-      learn: [
-        'Tools help humans cut, shape, join, measure, and inspect materials.',
-        'Different tools are designed for different operations.',
-      ],
-      experiment: 'Match tools to manufacturing operations.',
-      game: 'Prepare a virtual workbench.',
-      build: 'Draw a tool and label what it does.',
-      mission: 'Identify three tools used at home and their purpose.',
-    },
-    {
-      id: 'manufacturing-03',
-      title: 'Machines',
-      subtitle: 'Power and precision',
-      learn: [
-        'Machines can apply force repeatedly and precisely.',
-        'Motors, gears, belts, shafts, and other mechanisms transfer motion.',
-      ],
-      experiment: 'Change machine components and observe movement.',
-      game: 'Repair a machine mechanism.',
-      build: 'Create a simple cardboard mechanism.',
-      mission: 'Find a machine and identify where motion enters and where it leaves.',
-    },
-    {
-      id: 'manufacturing-04',
-      title: 'Gears',
-      subtitle: 'Transfer and change motion',
-      learn: [
-        'Gears transfer rotational motion.',
-        'Different gear sizes can change speed and torque relationships.',
-        'The teeth must mesh correctly.',
-      ],
-      experiment: 'Rotate one gear and observe the connected gear.',
-      game: 'Build a working gear train.',
-      build: 'Make paper/cardboard gears if practical and safe.',
-      mission: 'Find a gear mechanism in an everyday object.',
-    },
-    {
-      id: 'manufacturing-05',
-      title: 'Production Line',
-      subtitle: 'Many steps, one product',
-      learn: [
-        'Manufacturing often divides a product into repeatable operations.',
-        'Sequencing, tools, materials, people, and machines must work together.',
-      ],
-      experiment: 'Rearrange production stations and observe the workflow.',
-      game: 'Build an efficient virtual production line.',
-      build: 'Design a paper production line for a simple object.',
-      mission: 'Choose an everyday product and list some steps it probably passes through.',
-    },
-    {
-      id: 'manufacturing-06',
-      title: 'Quality Inspector',
-      subtitle: 'Did we build it correctly?',
-      learn: [
-        'Manufacturing is not complete when an object is merely produced.',
-        'Measurements and inspection help identify defects.',
-        'Quality requirements depend on the product and its purpose.',
-      ],
-      experiment: 'Measure virtual parts and identify acceptable and unacceptable pieces.',
-      game: 'Inspect a batch of manufactured components.',
-      build: 'Create a simple quality checklist.',
-      mission: 'Inspect something you made and identify one way to improve it.',
-    },
-  ],
-
-  music: [
-    {
-      id: 'music-01',
-      title: 'Vibration',
-      subtitle: 'Where sound begins',
-      learn: [
-        'Sound is produced by vibrating sources and travels through a medium.',
-        'A vibrating string, membrane, or air column can create sound.',
-      ],
-      experiment: 'Change the vibration and watch the sound wave respond.',
-      game: 'Match vibrations to their visible wave patterns.',
-      build: 'Make a safe simple string vibration experiment.',
-      mission: 'Find three things that produce sound through vibration.',
-    },
-    {
-      id: 'music-02',
-      title: 'Frequency',
-      subtitle: 'Fast and slow vibrations',
-      learn: [
-        'Frequency describes how many cycles occur per second.',
-        'Higher frequency is associated with higher pitch.',
-      ],
-      experiment: 'Move the frequency control and observe the waveform.',
-      game: 'Arrange tones from lower to higher frequency.',
-      build: 'Create a simple visual frequency chart.',
-      mission: 'Compare two everyday sounds and describe which has the higher pitch.',
-    },
-    {
-      id: 'music-03',
-      title: 'Rhythm',
-      subtitle: 'Time organised into patterns',
-      learn: [
-        'Rhythm organizes sounds and silences in time.',
-        'Repeating patterns can make music predictable and expressive.',
-      ],
-      experiment: 'Watch a rhythm pattern animate and tap along.',
-      game: 'Reproduce changing rhythm patterns.',
-      build: 'Create your own four-beat rhythm.',
-      mission: 'Tap your rhythm on a table or safe surface for someone else.',
-    },
-    {
-      id: 'music-04',
-      title: 'Melody',
-      subtitle: 'Notes become a sequence',
-      learn: [
-        'A melody is an organized sequence of pitches.',
-        'Changing pitch or rhythm changes how a melody feels.',
-      ],
-      experiment: 'Move notes and listen to the sequence.',
-      game: 'Reconstruct a short melody.',
-      build: 'Create a four- or eight-note melody.',
-      mission: 'Hum or play your melody for someone.',
-    },
-  ],
-
-  humanity: [
-    {
-      id: 'humanity-01',
-      title: 'Human Needs',
-      subtitle: 'What people need to live well',
-      learn: [
-        'People need basics such as food, water, shelter, safety, care, and connection.',
-        'Different people can have different needs in different situations.',
-      ],
-      experiment: 'Change a person’s situation and observe which needs become urgent.',
-      game: 'Prepare resources for different scenarios.',
-      build: 'Create a simple human-needs map.',
-      mission: 'Notice one practical need someone around you has today.',
-    },
-    {
-      id: 'humanity-02',
-      title: 'Empathy',
-      subtitle: 'Understanding another perspective',
-      learn: [
-        'Empathy involves trying to understand another person’s feelings or perspective.',
-        'It does not require us to have exactly the same experience.',
-      ],
-      experiment: 'Explore a situation from two different perspectives.',
-      game: 'Choose helpful responses in changing situations.',
-      build: 'Write or draw two perspectives of the same event.',
-      mission: 'Listen carefully to someone without interrupting and summarize what they said.',
-    },
-    {
-      id: 'humanity-03',
-      title: 'Communication',
-      subtitle: 'Ideas move between people',
-      learn: [
-        'Communication can use words, gestures, drawings, signs, and other signals.',
-        'Clear communication includes checking whether the other person understood.',
-      ],
-      experiment: 'Send the same message through different communication methods.',
-      game: 'Repair unclear messages.',
-      build: 'Create a visual instruction card.',
-      mission: 'Teach someone a simple task using clear instructions.',
-    },
-    {
-      id: 'humanity-04',
-      title: 'Cooperation',
-      subtitle: 'Working together',
-      learn: [
-        'Cooperation means people coordinate their actions toward a shared purpose.',
-        'Different people can contribute different skills.',
-      ],
-      experiment: 'Change team roles and observe the effect on a shared task.',
-      game: 'Coordinate a team to solve a practical problem.',
-      build: 'Plan a small task with roles for two or more people.',
-      mission: 'Complete a household task together and notice how coordination helped.',
-    },
-    {
-      id: 'humanity-05',
-      title: 'Community',
-      subtitle: 'People connected by shared spaces',
-      learn: [
-        'Communities depend on people, systems, shared spaces, and responsibilities.',
-        'Small actions can affect other people.',
-      ],
-      experiment: 'Change one community resource and observe who is affected.',
-      game: 'Balance the needs of a small community.',
-      build: 'Draw your local community as a system of connected people and places.',
-      mission: 'Identify one small action that improves a shared space.',
-    },
-    {
-      id: 'humanity-06',
-      title: 'Help in Action',
-      subtitle: 'Knowledge becomes behaviour',
-      learn: [
-        'Helping does not always mean solving everything for someone.',
-        'Sometimes the best action is listening, asking what is needed, or connecting someone with appropriate help.',
-      ],
-      experiment: 'Explore several situations and compare possible responses.',
-      game: 'Coordinate help safely in a changing scenario.',
-      build: 'Create a simple “how I can help” plan for home or school.',
-      mission: 'Perform one safe, useful act of help without expecting a reward.',
-    },
-  ],
-
-  nature: [
-    {
-      id: 'nature-01',
-      title: 'Plants',
-      subtitle: 'Living systems around us',
-      learn: [
-        'Plants use light energy to make sugars through photosynthesis.',
-        'Roots, stems, leaves, flowers, and seeds have different roles.',
-      ],
-      experiment: 'Explore how changing light, water, and plant parts affects the model.',
-      game: 'Help a virtual plant complete its life cycle.',
-      build: 'Draw and label a plant.',
-      mission: 'Observe a real plant and record what you notice.',
-    },
-    {
-      id: 'nature-02',
-      title: 'Food Webs',
-      subtitle: 'Who depends on whom?',
-      learn: [
-        'Living organisms are connected through feeding relationships.',
-        'Food chains can connect into larger food webs.',
-      ],
-      experiment: 'Add or remove organisms and watch the food web change.',
-      game: 'Repair a damaged food web.',
-      build: 'Draw a small local food web.',
-      mission: 'Observe living things outdoors and identify one possible feeding relationship.',
-    },
-    {
-      id: 'nature-03',
-      title: 'Ecosystems',
-      subtitle: 'Many parts working together',
-      learn: [
-        'An ecosystem includes living organisms and their physical environment.',
-        'Changes to one part can affect other parts.',
-      ],
-      experiment: 'Change water, plants, predators, or habitat conditions.',
-      game: 'Keep a virtual ecosystem stable.',
-      build: 'Design a small ecosystem diagram.',
-      mission: 'Observe one local environment and list living and non-living parts.',
-    },
-    {
-      id: 'nature-04',
-      title: 'Restore',
-      subtitle: 'Repairing a changing ecosystem',
-      learn: [
-        'Human actions can alter habitats and resource availability.',
-        'Restoration can involve protecting habitat, reducing pollution, and supporting native biodiversity.',
-      ],
-      experiment: 'Test different restoration actions in a virtual habitat.',
-      game: 'Restore a damaged ecosystem.',
-      build: 'Design a simple local restoration idea.',
-      mission: 'Do one safe action that helps keep a shared natural space clean or healthy.',
-    },
-  ],
-};
-
-const ARTS_LEVELS: Record<string, Level[]> = {
-  drawing: [
-    {
-      id: 'arts-drawing-01',
-      title: 'Circle Family',
-      subtitle: 'Build drawings from curves',
-      learn: [
-        'A circle is more than a shape to copy.',
-        'Curves and circles can become wheels, eyes, faces, flowers, suns, bubbles, and many other structures.',
-        'Artists simplify complicated objects into basic forms before adding detail.',
-      ],
-      experiment: 'Watch a circle transform into several familiar drawings.',
-      game: 'Build an object by placing circles and curves in the correct construction positions.',
-      build: 'Draw a circle, then turn it into three different objects.',
-      mission: 'Look around and find three real objects that contain circular forms.',
-    },
-    {
-      id: 'arts-drawing-02',
-      title: 'Triangle Family',
-      subtitle: 'Pointed forms and structures',
-      learn: [
-        'Triangles create strong visual structures.',
-        'They can become roofs, mountains, arrows, leaves, trees, and many designed forms.',
-        'Changing their height, width, and direction changes the character of the drawing.',
-      ],
-      experiment: 'Stretch, rotate, and combine triangles to see what forms appear.',
-      game: 'Construct a picture using triangle families.',
-      build: 'Draw three different objects beginning with triangles.',
-      mission: 'Find triangle-like structures around you.',
-    },
-    {
-      id: 'arts-drawing-03',
-      title: 'Square & Rectangle Family',
-      subtitle: 'Structures and objects',
-      learn: [
-        'Squares and rectangles create stable structural forms.',
-        'Buildings, windows, books, screens, boxes, machines, and many objects can begin from these forms.',
-      ],
-      experiment: 'Change proportions and combine rectangles into objects.',
-      game: 'Construct a robot, building, or object from rectangular forms.',
-      build: 'Draw an object beginning with rectangles.',
-      mission: 'Identify rectangular structures in your environment.',
-    },
-    {
-      id: 'arts-drawing-04',
-      title: 'Build a Drawing',
-      subtitle: 'Combine simple forms',
-      learn: [
-        'Complex drawings can be constructed from simple forms.',
-        'Start with large structures, then add smaller forms and details.',
-      ],
-      experiment: 'Watch a simple set of shapes transform into a finished illustration.',
-      game: 'Construct a complete drawing in stages.',
-      build: 'Create your own drawing using circles, triangles, and rectangles.',
-      mission: 'Show your drawing to someone and explain which basic forms you used.',
-    },
-  ],
-
-  diy: [
-    {
-      id: 'arts-diy-01',
-      title: 'See Before You Build',
-      subtitle: 'Objects have structure',
-      learn: [
-        'Before making something, observe the finished object.',
-        'Look for its parts, materials, joints, folds, and purpose.',
-      ],
-      experiment: 'Explore a virtual object and reveal its construction layers.',
-      game: 'Put the construction steps in order.',
-      build: 'Choose a simple household object and sketch its parts.',
-      mission: 'Observe a real object and identify how its pieces connect.',
-    },
-    {
-      id: 'arts-diy-02',
-      title: 'Paper Engineering',
-      subtitle: 'Fold, cut, join',
-      learn: [
-        'Paper can become stronger or more useful through folds and structures.',
-        'Tabs, folds, tubes, and layered pieces can create useful shapes.',
-      ],
-      experiment: 'Fold virtual paper and watch its strength/shape change.',
-      game: 'Assemble a paper structure from the demonstrated steps.',
-      build: 'Make a simple paper structure with safe materials.',
-      mission: 'Test which fold makes your paper structure stronger.',
-    },
-    {
-      id: 'arts-diy-03',
-      title: 'Build From Pictures',
-      subtitle: 'Visual instructions',
-      learn: [
-        'A picture can communicate construction information without long text.',
-        'Look for sequence, orientation, repeated parts, and attachment points.',
-      ],
-      experiment: 'Reveal a picture-based construction sequence.',
-      game: 'Follow visual instructions to assemble the object.',
-      build: 'Make the real object from the visual instructions.',
-      mission: 'Take your finished object and explain its construction to someone.',
-    },
-  ],
-
-  models: [
-    {
-      id: 'arts-models-01',
-      title: 'Template to Model',
-      subtitle: 'Flat paper becomes 3D',
-      learn: [
-        'A template, or net, represents the surfaces of a 3D object in a flat form.',
-        'Cutting, folding, and joining can turn it into a model.',
-      ],
-      experiment: 'Fold a virtual template into a 3D shape.',
-      game: 'Choose the folds needed to build the model.',
-      build: 'Print or copy a simple template onto paper and make the model.',
-      mission: 'Show the finished model and identify its faces and edges.',
-    },
-    {
-      id: 'arts-models-02',
-      title: 'Cardboard Structure',
-      subtitle: 'Strong forms',
-      learn: [
-        'Cardboard can be cut and joined into larger structures.',
-        'Triangles, boxes, beams, and folded edges can make structures stronger.',
-      ],
-      experiment: 'Change the structure and observe how it behaves under a simple load.',
-      game: 'Build a stable virtual cardboard structure.',
-      build: 'Make a small structure from cardboard or thick paper with adult supervision.',
-      mission: 'Test the structure safely and identify what made it stable.',
-    },
-    {
-      id: 'arts-models-03',
-      title: 'Build a Machine Model',
-      subtitle: 'Model something that moves',
-      learn: [
-        'Models can represent machines, vehicles, buildings, or natural systems.',
-        'A useful model shows important parts clearly, even if it does not perform every real function.',
-      ],
-      experiment: 'Explore the parts of a simple machine model.',
-      game: 'Assemble the model from templates.',
-      build: 'Build a paper/cardboard model of a machine, vehicle, or structure.',
-      mission: 'Explain what each visible part represents.',
-    },
-  ],
-};
-
-function getTheme(subject: string) {
-  return THEMES[subject] ?? THEMES.vedic;
-}
-
-const VEDIC_BRANCH_LEVELS: Record<string, Level[]> = {
-  'number-sense': LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-number-sense-'),
-  ),
-  'near-base': LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-near-base-'),
-  ),
-  crosswise: LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-crosswise-'),
-  ),
-  mental: LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-mental-'),
-  ),
-  patterns: LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-patterns-'),
-  ),
-  'real-world': LEVELS.vedic.filter((level) =>
-    level.id.startsWith('vedic-real-world-'),
-  ),
-};
-
-function getLevels(subject: string, branch?: string) {
-  if (subject === 'arts') {
-    return ARTS_LEVELS[branch ?? 'drawing'];
-  }
-
-  if (subject === 'vedic') {
-    return VEDIC_BRANCH_LEVELS[branch ?? 'number-sense'] ?? VEDIC_BRANCH_LEVELS['number-sense'];
-  }
-
-  return LEVELS[subject] ?? LEVELS.vedic;
-}
-
-function useFloatAnimation() {
-  const [value] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(value, {
-          toValue: 1,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(value, {
-          toValue: 0,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [value]);
-
-  return value;
-}
-
-
-function MusicLessonVisual({
-  level,
-  content,
-}: {
-  level: Level;
-  content?: import('@/features/lessons/lesson-content').LessonContent;
-}) {
-  const lowPlayer = useAudioPlayer(
-    require('../../../../assets/audio/music/low.wav'),
-  );
-  const middlePlayer = useAudioPlayer(
-    require('../../../../assets/audio/music/middle.wav'),
-  );
-  const highPlayer = useAudioPlayer(
-    require('../../../../assets/audio/music/high.wav'),
-  );
-  const clickPlayer = useAudioPlayer(
-    require('../../../../assets/audio/music/click.wav'),
-  );
-
-  const float = useFloatAnimation();
-
-  const [musicPlaying, setMusicPlaying] = useState(true);
-  const [speed, setSpeed] = useState(2);
-  const [rhythmStep, setRhythmStep] = useState(0);
-  const [rhythmPlaying, setRhythmPlaying] = useState(false);
-  const [activeBeat, setActiveBeat] = useState(-1);
-  const [melodyNote, setMelodyNote] = useState(1);
-
-  const translateY = float.interpolate({
-    inputRange: [0, 1],
-    outputRange: [4, -8],
+    return {
+      number,
+      title: item.title,
+      description: item.description,
+      object: item.object,
+      concept: item.concept,
+      route: item.route,
+      state,
+    };
   });
+}
 
-  const playNote = (note: number) => {
-    const player =
-      note === 0 ? lowPlayer : note === 1 ? middlePlayer : highPlayer;
+/*
+ * Organic knowledge-map positions.
+ *
+ * These deliberately avoid a left-right staircase.
+ * The route feels like a concept flowing through a subject world.
+ */
+const LEVEL_POINTS = [
+  { x: MAP_WIDTH * 0.28, y: 135 },
+  { x: MAP_WIDTH * 0.62, y: 285 },
+  { x: MAP_WIDTH * 0.42, y: 455 },
+  { x: MAP_WIDTH * 0.72, y: 625 },
+  { x: MAP_WIDTH * 0.47, y: 780 },
+];
 
-    player.seekTo(0);
-    player.play();
-  };
+function getMainPaths() {
+  const p = LEVEL_POINTS;
 
-  const rhythmPatterns = [
-    ['●', '—', '●', '—'],
-    ['●', '●', '—', '●'],
-    ['●', '—', '●●', '—'],
+  return [
+    `M ${p[0].x} ${p[0].y}
+     C ${MAP_WIDTH * 0.37} 175,
+       ${MAP_WIDTH * 0.57} 220,
+       ${p[1].x} ${p[1].y}`,
+
+    `M ${p[1].x} ${p[1].y}
+     C ${MAP_WIDTH * 0.66} 350,
+       ${MAP_WIDTH * 0.49} 390,
+       ${p[2].x} ${p[2].y}`,
+
+    `M ${p[2].x} ${p[2].y}
+     C ${MAP_WIDTH * 0.38} 520,
+       ${MAP_WIDTH * 0.61} 555,
+       ${p[3].x} ${p[3].y}`,
+
+    `M ${p[3].x} ${p[3].y}
+     C ${MAP_WIDTH * 0.67} 690,
+       ${MAP_WIDTH * 0.54} 735,
+       ${p[4].x} ${p[4].y}`,
   ];
+}
 
-  const notes = ['LOW', 'MID', 'HIGH'];
-
-  const isVibration = level.id === 'music-01';
-  const isFrequency = level.id === 'music-02';
-  const isRhythm = level.id === 'music-03';
-  const isMelody = level.id === 'music-04';
-
-  const currentPattern = rhythmPatterns[rhythmStep];
-
-  const playRhythm = () => {
-    if (rhythmPlaying) return;
-
-    setRhythmPlaying(true);
-    setActiveBeat(-1);
-
-    currentPattern.forEach((beat, index) => {
-      setTimeout(() => {
-        setActiveBeat(index);
-
-        if (beat !== '—') {
-          clickPlayer.seekTo(0);
-          clickPlayer.play();
-        }
-      }, index * 500);
-    });
-
-    setTimeout(() => {
-      setActiveBeat(-1);
-      setRhythmPlaying(false);
-    }, currentPattern.length * 500 + 100);
-  };
-
+function SubjectObject({
+  subject,
+  object,
+  accent,
+}: {
+  subject: SubjectId;
+  object: string;
+  accent: string;
+}) {
   return (
-    <View style={styles.visualArea}>
-
-      <Text style={styles.visualTitle}>{level.title}</Text>
-      <Text style={styles.visualCaption}>WATCH THE IDEA FIRST</Text>
-
-      {content && (
-        <VisualLesson content={content} />
-      )}
-
-      {isVibration && (
-        <View style={styles.musicLessonBox}>
-          <Text style={styles.musicLessonText}>
-            Sound begins with vibration. Watch the wave move, then hear it.
-          </Text>
-
-          <Pressable
-            onPress={() => {
-              setMusicPlaying((value) => !value);
-              playNote(1);
-            }}
-            style={styles.musicLessonButton}
-          >
-            <Text style={styles.musicLessonButtonText}>
-              {musicPlaying ? 'PAUSE VIBRATION' : 'PLAY VIBRATION'}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {isFrequency && (
-        <View style={styles.musicLessonBox}>
-          <Text style={styles.musicLessonText}>
-            Slow vibration makes a lower sound. Fast vibration makes a higher sound.
-          </Text>
-
-          <View style={styles.musicControlRow}>
-            {[1, 2, 3].map((value) => (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  setSpeed(value);
-                  playNote(value - 1);
-                }}
-                style={[
-                  styles.musicSpeedButton,
-                  speed === value && styles.musicSpeedButtonActive,
-                ]}
-              >
-                <Text style={styles.musicSpeedText}>
-                  {value === 1 ? 'SLOW' : value === 2 ? 'MEDIUM' : 'FAST'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {isRhythm && (
-        <View style={styles.musicLessonBox}>
-          <Text style={styles.musicLessonText}>
-            Rhythm is a pattern of sounds and pauses. Watch the pattern, then listen.
-          </Text>
-
-          <View style={styles.rhythmSequence}>
-            {currentPattern.map((beat, index) => (
-              <View
-                key={`${beat}-${index}`}
-                style={[
-                  styles.rhythmBeat,
-                  activeBeat === index && styles.rhythmBeatActive,
-                ]}
-              >
-                <Text style={styles.rhythmBeatText}>
-                  {beat}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <Pressable
-            disabled={rhythmPlaying}
-            onPress={playRhythm}
-            style={[
-              styles.musicLessonButton,
-              rhythmPlaying && styles.musicLessonButtonDisabled,
-            ]}
-          >
-            <Text style={styles.musicLessonButtonText}>
-              {rhythmPlaying ? 'LISTENING...' : 'PLAY RHYTHM'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            disabled={rhythmPlaying}
-            onPress={() => {
-              setRhythmStep((value) => (value + 1) % rhythmPatterns.length);
-              setActiveBeat(-1);
-            }}
-            style={styles.musicSecondaryButton}
-          >
-            <Text style={styles.musicLessonButtonText}>
-              TRY ANOTHER PATTERN
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {isMelody && (
-        <View style={styles.musicLessonBox}>
-          <Text style={styles.musicLessonText}>
-            Melody is a sequence of different pitches. Tap each one and listen.
-          </Text>
-
-          <Text style={styles.melodyNote}>{notes[melodyNote]}</Text>
-
-          <View style={styles.musicControlRow}>
-            {notes.map((note, index) => (
-              <Pressable
-                key={note}
-                onPress={() => {
-                  setMelodyNote(index);
-                  playNote(index);
-                }}
-                style={[
-                  styles.musicSpeedButton,
-                  melodyNote === index && styles.musicSpeedButtonActive,
-                ]}
-              >
-                <Text style={styles.musicSpeedText}>{note}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
+    <View style={styles.objectCore}>
+      <Text
+        style={[
+          styles.objectText,
+          {
+            color: accent,
+            fontSize:
+              subject === 'manufacturing' ? 34 : 31,
+          },
+        ]}
+      >
+        {object}
+      </Text>
     </View>
   );
 }
 
-function LearnVisual({
-  subject,
+function LevelNode({
   level,
-}: {
-  subject: string;
-  level: Level;
-}) {
-  const float = useFloatAnimation();
-
-  const translateY = float.interpolate({
-    inputRange: [0, 1],
-    outputRange: [4, -8],
-  });
-
-  if (subject === 'music') {
-    return (
-      <MusicLessonVisual
-        level={level}
-        content={
-          LESSON_CONTENT[level.id] ?? LESSON_CONTENT.music
-        }
-      />
-    );
-  }
-
-  const lessonContent =
-    LESSON_CONTENT[subject as keyof typeof LESSON_CONTENT];
-
-  return (
-    <View style={styles.visualArea}>
-      <Animated.View style={{ transform: [{ translateY }] }}>
-        {lessonContent && (
-        <VisualLesson content={lessonContent} />
-      )}
-      </Animated.View>
-
-      <Text style={styles.visualTitle}>{level.title}</Text>
-      <Text style={styles.visualCaption}>WATCH THE IDEA FIRST</Text>
-    </View>
-  );
-}
-
-function VedicBranchPicker({
-  branch,
-  onChange,
-  theme,
-}: {
-  branch: string;
-  onChange: (value: string) => void;
-  theme: Theme;
-}) {
-  return (
-    <View style={styles.branchRow}>
-      {[
-        ['number-sense', '🔢', 'Number Sense'],
-        ['near-base', '🎯', 'Near the Base'],
-        ['crosswise', '✖️', 'Crosswise'],
-        ['mental', '🧠', 'Mental Maths'],
-        ['patterns', '🧩', 'Patterns'],
-        ['real-world', '🛒', 'Real-World Maths'],
-      ].map(([id, icon, label]) => {
-        const active = branch === id;
-
-        return (
-          <Pressable
-            key={id}
-            onPress={() => onChange(id)}
-            style={[
-              styles.branchButton,
-              active && {
-                borderColor: theme.accent,
-                backgroundColor: 'rgba(255,255,255,0.13)',
-              },
-            ]}
-          >
-            <Text style={styles.branchIcon}>{icon}</Text>
-            <Text style={styles.branchText}>{label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function ArtsBranchPicker({
-  branch,
-  onChange,
-  theme,
-}: {
-  branch: string;
-  onChange: (value: string) => void;
-  theme: Theme;
-}) {
-  return (
-    <View style={styles.branchRow}>
-      {[
-        ['drawing', '✎', 'Drawing'],
-        ['diy', '🛠', 'DIY'],
-        ['models', '▣', 'Models'],
-      ].map(([id, icon, label]) => {
-        const active = branch === id;
-
-        return (
-          <Pressable
-            key={id}
-            onPress={() => onChange(id)}
-            style={[
-              styles.branchButton,
-              active && {
-                borderColor: theme.accent,
-                backgroundColor: 'rgba(255,255,255,0.13)',
-              },
-            ]}
-          >
-            <Text style={styles.branchIcon}>{icon}</Text>
-            <Text style={styles.branchText}>{label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function ExperimentVisual({
   subject,
-  levelIndex,
-  theme,
+  accent,
+  accentLight,
+  selected,
+  onPress,
 }: {
-  subject: string;
-  levelIndex: number;
-  theme: Theme;
+  level: Level;
+  subject: SubjectId;
+  accent: string;
+  accentLight: string;
+  selected: boolean;
+  onPress: () => void;
 }) {
-  const [progress] = useState(() => new Animated.Value(0));
+  const point = LEVEL_POINTS[level.number - 1];
 
-  useEffect(() => {
-    progress.setValue(0);
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(progress, {
-          toValue: 0,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-
-    return () => progress.stopAnimation();
-  }, [levelIndex, progress]);
-
-  const move = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-60, 60],
-  });
-
-  let content = '●';
-
-  if (subject === 'electronics') content = '💧';
-  if (subject === 'physics') content = '●';
-  if (subject === 'manufacturing') content = '⚙';
-  if (subject === 'music') content = '〰';
-  if (subject === 'nutrition') content = '🥗';
-  if (subject === 'arts') content = '✎';
-  if (subject === 'nature') content = '🌿';
-  if (subject === 'humanity') content = '●';
-  if (subject === 'vedic') content = '98';
+  const isCurrent = level.state === 'current';
+  const isCompleted = level.state === 'completed';
+  const isLocked = level.state === 'locked';
 
   return (
-    <View style={styles.experimentBox}>
-      <Animated.View style={{ transform: [{ translateX: move }] }}>
-        <Text style={[styles.experimentObject, { color: theme.accent }]}>
-          {content}
-        </Text>
-      </Animated.View>
+    <Pressable
+      disabled={isLocked || !level.route}
+      onPress={onPress}
+      style={[
+        styles.nodeWrapper,
+        {
+          left: point.x - 61,
+          top: point.y - 61,
+        },
+      ]}
+    >
+      {isCurrent && (
+        <View style={styles.driver}>
+          <View
+            style={[
+              styles.driverDot,
+              { backgroundColor: accent },
+            ]}
+          />
+          <Text
+            style={[
+              styles.driverText,
+              { color: accent },
+            ]}
+          >
+            YOU ARE HERE
+          </Text>
+        </View>
+      )}
 
-      <View style={styles.experimentTrack}>
+      <LinearGradient
+        colors={
+          isLocked
+            ? ['#F0ECE8', '#FFFDFB', '#F5F1EE']
+            : [
+                accentLight + 'DD',
+                '#FFFDFB',
+                accentLight + '88',
+              ]
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.levelHole,
+          {
+            borderColor: isLocked
+              ? '#D9D2CC'
+              : accent + (isCurrent ? 'DD' : '70'),
+          },
+          isCurrent && {
+            borderWidth: 3,
+          },
+          selected && {
+            transform: [{ scale: 1.035 }],
+          },
+        ]}
+      >
         <View
           style={[
-            styles.experimentFill,
-            { backgroundColor: theme.accent },
+            styles.innerRing,
+            {
+              borderColor: isLocked
+                ? '#D8D0CA'
+                : accent + '45',
+            },
           ]}
-        />
-      </View>
+        >
+          {isLocked ? (
+            <Text style={styles.lockIcon}>🔒</Text>
+          ) : isCompleted ? (
+            <View
+              style={[
+                styles.completedCircle,
+                { backgroundColor: accent },
+              ]}
+            >
+              <Text style={styles.check}>✓</Text>
+            </View>
+          ) : (
+            <SubjectObject
+              subject={subject}
+              object={level.object}
+              accent={accent}
+            />
+          )}
+        </View>
 
-      <Text style={styles.experimentHint}>CHANGE IT • WATCH IT • UNDERSTAND IT</Text>
-    </View>
+        <View
+          style={[
+            styles.numberBadge,
+            {
+              backgroundColor: isLocked
+                ? '#BDB5AE'
+                : accent,
+            },
+          ]}
+        >
+          <Text style={styles.numberText}>
+            {level.number}
+          </Text>
+        </View>
+      </LinearGradient>
+
+      <View style={styles.nodeLabel}>
+        <Text
+          style={[
+            styles.concept,
+            {
+              color: isLocked
+                ? '#AAA19A'
+                : accent,
+            },
+          ]}
+        >
+          {level.concept}
+        </Text>
+
+        <Text style={styles.nodeTitle}>
+          {level.title}
+        </Text>
+
+        <Text style={styles.nodeStatus}>
+          {isCurrent
+            ? 'READY TO PLAY'
+            : isCompleted
+            ? 'COMPLETED'
+            : 'LOCKED'}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
-export default function SubjectGameScreen() {
-  const router = useRouter();
+export default function GamesSubjectScreen() {
   const params = useLocalSearchParams<{
     subject?: string;
-    branch?: string;
+    completed?: string;
   }>();
 
-  const subject = String(params.subject ?? 'vedic').toLowerCase();
-  const initialBranch = String(
-    params.branch ?? (subject === 'vedic' ? 'number-sense' : 'drawing'),
-  ).toLowerCase();
+  const router = useRouter();
 
-  const [branch, setBranch] = useState(initialBranch);
-  const [levelIndex, setLevelIndex] = useState(0);
-  const [stage, setStage] = useState<Stage>('learn');
-  const [, setProgress] = useState(0);
-
-  const theme = getTheme(subject);
-  const levels = useMemo(
-    () => getLevels(subject, branch),
-    [subject, branch],
+  const completedLevel = Math.max(
+    0,
+    Math.min(5, Number(params.completed ?? '0')),
   );
 
-  const level = levels[levelIndex] ?? levels[0];
+  const requestedSubject =
+    String(params.subject ?? 'vedic').toLowerCase();
 
+  const subject: SubjectId =
+    requestedSubject === 'arts'
+      ? 'arts'
+      : requestedSubject === 'manufacturing' ||
+        requestedSubject === 'tech'
+      ? 'manufacturing'
+      : 'vedic';
 
-  if (!level) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>This learning world is not ready yet.</Text>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>BACK TO SPACE</Text>
-        </Pressable>
-      </View>
+  const config = SUBJECTS[subject];
+
+  const levels = useMemo(
+    () => createLevels(subject, completedLevel),
+    [subject, completedLevel],
+  );
+
+  const [selectedLevel, setSelectedLevel] =
+    useState(Math.min(completedLevel + 1, 5));
+
+  const [showTransition, setShowTransition] =
+    useState(false);
+
+  const transitionProgress = useState(
+    new Animated.Value(0),
+  )[0];
+
+  useEffect(() => {
+    setSelectedLevel(
+      Math.min(completedLevel + 1, 5),
     );
-  }
 
-  const subjectTitle =
-    subject === 'arts'
-      ? 'ARTS'
-      : subject === 'vedic'
-        ? 'VEDIC MATHS'
-        : subject.toUpperCase();
+    if (completedLevel > 0) {
+      setShowTransition(true);
+      transitionProgress.setValue(0);
 
-  async function finishLevel() {
-    await collectStar({
-      id: level.id,
-      subject,
-      level: levelIndex + 1,
-      title: level.title,
-    });
+      Animated.timing(transitionProgress, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
 
-    setStage('complete');
-  }
+      const timer = setTimeout(() => {
+        setShowTransition(false);
+      }, 1700);
 
-  function nextLevel() {
-    if (levelIndex < levels.length - 1) {
-      setLevelIndex((value) => value + 1);
-      
-      setStage('learn');
-        return;
+      return () => clearTimeout(timer);
     }
 
-    router.back();
-  }
+    return undefined;
+  }, [completedLevel, transitionProgress]);
 
-  function continueStage() {
-    if (stage === 'learn') {
-      setStage('experiment');
-      setProgress(1);
-    } else if (stage === 'experiment') {
-      setStage('game');
-      setProgress(2);
-    } else if (stage === 'game') {
-      setStage('build');
-      setProgress(3);
-    } else if (stage === 'build') {
-      setStage('mission');
-      setProgress(4);
-    } else if (stage === 'mission') {
-      void finishLevel();
+  const selected =
+    levels[selectedLevel - 1] ?? levels[0];
+
+  const paths = getMainPaths();
+
+  const openLevel = (level: Level) => {
+    setSelectedLevel(level.number);
+
+    if (
+      level.state !== 'current' ||
+      !level.route
+    ) {
+      return;
     }
-  }
+
+    router.push(level.route as any);
+  };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.screen}>
       <Stack.Screen
         options={{
           headerShown: false,
-          animation: 'fade',
         }}
       />
 
-      <LinearGradient colors={theme.colors} style={StyleSheet.absoluteFill}>
-        <View style={styles.backgroundOrbOne} />
-        <View style={styles.backgroundOrbTwo} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </Pressable>
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
+          <View style={styles.headerText}>
+            <Text style={styles.subjectTitle}>
+              {config.title}
+            </Text>
+
+            <Text style={styles.subjectSubtitle}>
+              {config.subtitle}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.worldOrb,
+              {
+                borderColor: config.accent,
+                backgroundColor:
+                  config.accentLight,
+              },
+            ]}
+          />
+        </View>
+
+        <View style={styles.intro}>
+          <Text style={styles.eyebrow}>
+            YOUR JOURNEY
+          </Text>
+
+          <Text style={styles.introTitle}>
+            Learn → discover → build
+          </Text>
+
+          <Text style={styles.introSubtitle}>
+            Each level grows from the idea before it.
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.map,
+            { width: MAP_WIDTH },
+          ]}
         >
-          <View style={styles.topBar}>
-            <Pressable onPress={() => router.back()} style={styles.spaceButton}>
-              <Text style={styles.spaceButtonText}>✦ SPACE</Text>
-            </Pressable>
+          <Svg
+            width={MAP_WIDTH}
+            height={MAP_HEIGHT}
+            viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+          >
+            {/* soft subject atmosphere */}
 
-            <View style={styles.subjectTitleWrap}>
-              <Text style={[styles.subjectIcon, { color: theme.accent }]}>
-                {theme.icon}
+            <Circle
+              cx={MAP_WIDTH * 0.27}
+              cy={140}
+              r={115}
+              fill={config.accentLight}
+              opacity={0.13}
+            />
+
+            <Circle
+              cx={MAP_WIDTH * 0.70}
+              cy={300}
+              r={125}
+              fill={config.accentLight}
+              opacity={0.11}
+            />
+
+            <Circle
+              cx={MAP_WIDTH * 0.35}
+              cy={500}
+              r={135}
+              fill={config.accentLight}
+              opacity={0.10}
+            />
+
+            <Circle
+              cx={MAP_WIDTH * 0.70}
+              cy={650}
+              r={125}
+              fill={config.accentLight}
+              opacity={0.10}
+            />
+
+            {/* knowledge route */}
+
+            {paths.map((path, index) => (
+              <Path
+                key={`future-${index}`}
+                d={path}
+                fill="none"
+                stroke="#DDD6D0"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            ))}
+
+            {paths
+              .slice(0, completedLevel)
+              .map((path, index) => (
+                <Path
+                  key={`done-${index}`}
+                  d={path}
+                  fill="none"
+                  stroke={config.accent}
+                  strokeOpacity={0.82}
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                />
+              ))}
+
+            {/* small conceptual marks, not level nodes */}
+
+            <Circle
+              cx={MAP_WIDTH * 0.12}
+              cy={235}
+              r={5}
+              fill={config.accent}
+              opacity={0.25}
+            />
+
+            <Circle
+              cx={MAP_WIDTH * 0.86}
+              cy={455}
+              r={5}
+              fill={config.accent}
+              opacity={0.25}
+            />
+
+            <Circle
+              cx={MAP_WIDTH * 0.16}
+              cy={650}
+              r={4}
+              fill={config.accent}
+              opacity={0.22}
+            />
+          </Svg>
+
+          {levels.map((level) => (
+            <LevelNode
+              key={level.number}
+              level={level}
+              subject={subject}
+              accent={config.accent}
+              accentLight={config.accentLight}
+              selected={
+                selectedLevel === level.number
+              }
+              onPress={() => openLevel(level)}
+            />
+          ))}
+
+          <View style={styles.premiumHorizon}>
+            <View
+              style={[
+                styles.premiumLine,
+                {
+                  backgroundColor:
+                    config.accentLight,
+                },
+              ]}
+            />
+
+            <Text style={styles.premiumEyebrow}>
+              MORE DISCOVERIES
+            </Text>
+
+            <Text style={styles.premiumTitle}>
+              Levels 6+
+            </Text>
+
+            <Text style={styles.premiumSubtitle}>
+              Premium subject worlds
+            </Text>
+
+            <Text style={styles.premiumLock}>
+              🔒
+            </Text>
+          </View>
+
+          {showTransition && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.transitionBanner,
+                {
+                  opacity:
+                    transitionProgress.interpolate({
+                      inputRange: [0, 0.35, 1],
+                      outputRange: [0, 1, 0],
+                    }),
+                  transform: [
+                    {
+                      translateY:
+                        transitionProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [12, -8],
+                        }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.transitionTitle,
+                  { color: config.accent },
+                ]}
+              >
+                LEVEL {completedLevel} COMPLETE ✨
               </Text>
-              <Text style={styles.subjectTitle}>{subjectTitle}</Text>
+
+              <Text style={styles.transitionNext}>
+                LEVEL{' '}
+                {Math.min(
+                  completedLevel + 1,
+                  5,
+                )}{' '}
+                UNLOCKED
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+
+        <View style={styles.levelPanel}>
+          <View style={styles.panelTop}>
+            <View style={styles.panelTitles}>
+              <Text
+                style={[
+                  styles.panelEyebrow,
+                  { color: config.accent },
+                ]}
+              >
+                LEVEL {selected.number}
+              </Text>
+
+              <Text style={styles.panelTitle}>
+                {selected.title}
+              </Text>
             </View>
 
-            <Text style={styles.levelCounter}>
-              {levelIndex + 1}/{levels.length}
-            </Text>
+            <View
+              style={[
+                styles.statusPill,
+                {
+                  backgroundColor:
+                    selected.state === 'locked'
+                      ? '#BDB5AE'
+                      : config.accent,
+                },
+              ]}
+            >
+              <Text style={styles.statusText}>
+                {selected.state === 'current'
+                  ? 'READY'
+                  : selected.state === 'completed'
+                  ? 'DONE'
+                  : 'LOCKED'}
+              </Text>
+            </View>
           </View>
 
-          {subject === 'arts' && (
-            <ArtsBranchPicker
-              branch={branch}
-              onChange={(value) => {
-                setBranch(value);
-                setLevelIndex(0);
-                setStage('learn');
-              }}
-              theme={theme}
-            />
-          )}
+          <Text style={styles.description}>
+            {selected.description}
+          </Text>
 
-          {subject === 'vedic' && (
-            <VedicBranchPicker
-              branch={branch}
-              onChange={(value) => {
-                setBranch(value);
-                setLevelIndex(0);
-                setStage('learn');
-              }}
-              theme={theme}
-            />
-          )}
+          {selected.state === 'current' &&
+          selected.route ? (
+            <Pressable
+              onPress={() => openLevel(selected)}
+              style={[
+                styles.beginButton,
+                {
+                  backgroundColor:
+                    config.accent,
+                },
+              ]}
+            >
+              <Text style={styles.beginText}>
+                PLAY LEVEL {selected.number}
+              </Text>
 
-          <View style={styles.levelMap}>
-            {levels.map((item, index) => (
-              <View
-                key={item.id}
+              <Text style={styles.beginArrow}>
+                →
+              </Text>
+            </Pressable>
+          ) : selected.state === 'locked' ? (
+            <View style={styles.lockMessage}>
+              <Text style={styles.lockMessageIcon}>
+                🔒
+              </Text>
+
+              <Text style={styles.lockMessageText}>
+                Complete Level{' '}
+                {Math.max(
+                  1,
+                  selected.number - 1,
+                )}{' '}
+                to unlock this discovery.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.doneMessage}>
+              <Text
                 style={[
-                  styles.levelDot,
-                  index === levelIndex && {
-                    backgroundColor: theme.accent,
-                    borderColor: theme.accent,
-                  },
-                  index < levelIndex && {
-                    backgroundColor: 'rgba(255,255,255,0.75)',
+                  styles.doneIcon,
+                  {
+                    backgroundColor:
+                      config.accent,
                   },
                 ]}
               >
-                {index <= levelIndex && (
-                  <Text
-                    style={[
-                      styles.levelDotText,
-                      index === levelIndex && { color: '#101020' },
-                    ]}
-                  >
-                    {index < levelIndex ? '✓' : index + 1}
-                  </Text>
-                )}
-              </View>
-            ))}
-          </View>
+                ✓
+              </Text>
 
-          <View style={styles.room}>
-            <Text style={styles.stageLabel}>
-              {stage === 'learn'
-                ? '01 • DISCOVER'
-                : stage === 'experiment'
-                  ? '02 • EXPERIMENT'
-                  : stage === 'game'
-                    ? '03 • PLAY WITH THE IDEA'
-                    : stage === 'build'
-                      ? '04 • MAKE IT'
-                      : stage === 'mission'
-                        ? '05 • REAL WORLD'
-                        : '✦ STAR FOUND'}
-            </Text>
+              <Text style={styles.doneMessageText}>
+                You discovered this part of the
+                subject world.
+              </Text>
+            </View>
+          )}
+        </View>
 
-            <Text style={styles.levelTitle}>{level.title}</Text>
-            <Text style={styles.levelSubtitle}>{level.subtitle}</Text>
-
-            {stage === 'learn' && (
-              <>
-                <LearnVisual subject={subject} level={level} />
-
-                <View style={styles.lessonBox}>
-                  {level.learn.map((paragraph) => (
-                    <View key={paragraph} style={styles.lessonRow}>
-                      <Text style={[styles.lessonBullet, { color: theme.accent }]}>
-                        ●
-                      </Text>
-                      <Text style={styles.lessonText}>{paragraph}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {stage === 'experiment' && (
-              <>
-                <ExperimentVisual
-                  subject={subject}
-                  levelIndex={levelIndex}
-                  theme={theme}
-                />
-
-                <View style={styles.instructionBox}>
-                  <Text style={styles.instructionTitle}>TRY THE IDEA</Text>
-                  <Text style={styles.instructionText}>
-                    {level.experiment}
-                  </Text>
-                </View>
-              </>
-            )}
-
-            {stage === 'game' && (
-              <View style={styles.gamePanel}>
-                {subject === 'vedic' ? (
-                  <VedicEscape
-                    levelNumber={levelIndex + 1}
-                    onComplete={() => setStage('build')}
-                  />
-                ) : subject === 'manufacturing' ? (
-                  levelIndex === 0 ? (
-                    <MaterialsGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 1 ? (
-                    <ToolsGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 2 ? (
-                    <MachinesGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 3 ? (
-                    <GearsGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 4 ? (
-                    <ProductionLineGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : (
-                    <QualityInspectorGame
-                      onComplete={() => setStage('build')}
-                    />
-                  )
-                ) : subject === 'electronics' ? (
-                  levelIndex === 0 ? (
-                    <WaterLogicGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 1 ? (
-                    <ComplexPipesGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 2 ? (
-                    <LogicGateGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 3 ? (
-                    <CircuitRepairGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : levelIndex === 4 ? (
-                    <BinaryGame
-                      onComplete={() => setStage('build')}
-                    />
-                  ) : (
-                    <BinaryCodeGame
-                      onComplete={() => setStage('build')}
-                    />
-                  )
-                ) : (
-                  <>
-                    <Text style={styles.gameIcon}>{theme.icon}</Text>
-                    <Text style={styles.gameStatus}>
-                      ACTIVE CHALLENGE
-                    </Text>
-                    <Text style={styles.gameText}>
-                      {level.game}
-                    </Text>
-
-                    <Pressable
-                      onPress={() => setStage('build')}
-                      style={[
-                        styles.actionButton,
-                        { backgroundColor: theme.accent },
-                      ]}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        I UNDERSTAND → BUILD
-                      </Text>
-                    </Pressable>
-                  </>
-                )}
-              </View>
-            )}
-
-            {stage === 'build' && (
-              <>
-                <View style={styles.buildBoard}>
-                  <Text style={styles.buildBoardTitle}>BUILD / CREATE</Text>
-
-                  <View style={styles.buildObjects}>
-                    <Text style={styles.buildObject}>□</Text>
-                    <Text style={styles.buildObject}>△</Text>
-                    <Text style={styles.buildObject}>○</Text>
-                    <Text style={styles.buildObject}>⚙</Text>
-                  </View>
-                </View>
-
-                <View style={styles.instructionBox}>
-                  <Text style={styles.instructionTitle}>NOW MAKE SOMETHING</Text>
-                  <Text style={styles.instructionText}>{level.build}</Text>
-                </View>
-              </>
-            )}
-
-            {stage === 'mission' && (
-              <>
-                <View style={styles.missionVisual}>
-                  <Text style={styles.missionIcon}>⌂</Text>
-                  <Text style={styles.missionSmall}>
-                    TAKE THE KNOWLEDGE OUTSIDE THE SCREEN
-                  </Text>
-                </View>
-
-                <View style={styles.missionBox}>
-                  <Text style={styles.missionTitle}>REAL-WORLD MISSION</Text>
-                  <Text style={styles.missionText}>{level.mission}</Text>
-                </View>
-
-                <Text style={styles.guardianText}>
-                  Ask a grown-up when the activity involves tools, heat,
-                  electricity, food preparation, or anything unsafe to do alone.
-                </Text>
-              </>
-            )}
-
-            {stage === 'complete' && (
-              <View style={styles.completeBox}>
-                <Text style={[styles.smallStar, { color: theme.accent }]}>✦</Text>
-                <Text style={styles.completeTitle}>A STAR HAS BEEN FOUND</Text>
-                <Text style={styles.completeText}>
-                  You learned something, experimented with it, and took it into
-                  the real world.
-                </Text>
-
-                <Pressable
-                  onPress={nextLevel}
-                  style={[
-                    styles.actionButton,
-                    { backgroundColor: theme.accent },
-                  ]}
-                >
-                  <Text style={styles.actionButtonText}>
-                    {levelIndex < levels.length - 1
-                      ? 'NEXT DISCOVERY →'
-                      : 'RETURN TO SPACE'}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-
-            {stage !== 'complete' && (
-              <Pressable
-                onPress={continueStage}
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: theme.accent },
-                ]}
-              >
-                <Text style={styles.actionButtonText}>
-                  {stage === 'learn'
-                    ? 'START EXPERIMENT →'
-                    : stage === 'experiment'
-                      ? 'ENTER CHALLENGE →'
-                      : stage === 'build'
-                        ? 'GO TO REAL WORLD →'
-                        : stage === 'mission'
-                          ? 'COLLECT SMALL STAR ✦'
-                          : 'CONTINUE →'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Learning is the journey. The star is only a memory of it.
-            </Text>
-          </View>
-        </ScrollView>
-      </LinearGradient>
+        <View style={styles.bottomSpace} />
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gamePanel: {
-    marginTop: 10,
-    padding: 18,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.035)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFF9F5',
   },
 
-  gameStatus: {
-    color: 'rgba(255,255,255,0.45)',
+  scrollContent: {
+    paddingBottom: 40,
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 10,
+  },
+
+  backButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFDFB',
+    borderWidth: 1,
+    borderColor: '#E9E1DA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  backIcon: {
+    fontSize: 35,
+    color: '#4A4542',
+    lineHeight: 38,
+    marginTop: -4,
+  },
+
+  headerText: {
+    flex: 1,
+    paddingHorizontal: 14,
+  },
+
+  subjectTitle: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: '#34313A',
+  },
+
+  subjectSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#817873',
+  },
+
+  worldOrb: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+  },
+
+  intro: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+
+  eyebrow: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
-    textAlign: 'center',
+    letterSpacing: 1.8,
+    color: '#A39A94',
+  },
+
+  introTitle: {
+    marginTop: 5,
+    fontSize: 25,
+    fontWeight: '800',
+    color: '#34313A',
+  },
+
+  introSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#817873',
+  },
+
+  map: {
+    height: MAP_HEIGHT,
+    position: 'relative',
+  },
+
+  nodeWrapper: {
+    position: 'absolute',
+    width: 122,
+    alignItems: 'center',
+    zIndex: 5,
+  },
+
+  levelHole: {
+    width: 122,
+    height: 122,
+    borderRadius: 61,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+
+    shadowColor: '#675B54',
+    shadowOpacity: 0.13,
+    shadowRadius: 15,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+
+    elevation: 5,
+  },
+
+  innerRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  objectCore: {
+    minWidth: 65,
+    minHeight: 56,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFFB8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+
+  objectText: {
+    fontWeight: '900',
+  },
+
+  completedCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  check: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '900',
+  },
+
+  lockIcon: {
+    fontSize: 22,
+    opacity: 0.62,
+  },
+
+  numberBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#FFFDFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  numberText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  nodeLabel: {
+    width: 170,
+    alignItems: 'center',
     marginTop: 8,
   },
 
-  gameText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    lineHeight: 25,
-    fontWeight: '700',
+  concept: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+
+  nodeTitle: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+    color: '#514A46',
     textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 20,
   },
 
+  nodeStatus: {
+    marginTop: 3,
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#A09892',
+  },
 
-  root: {
+  driver: {
+    position: 'absolute',
+    bottom: 132,
+    width: 150,
+    alignItems: 'center',
+    zIndex: 20,
+  },
+
+  driverDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    marginBottom: 4,
+  },
+
+  driverText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+  },
+
+  premiumHorizon: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    top: 835,
+    alignItems: 'center',
+  },
+
+  premiumLine: {
+    width: '100%',
+    height: 2,
+    marginBottom: 14,
+    opacity: 0.7,
+  },
+
+  premiumEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#A09892',
+  },
+
+  premiumTitle: {
+    marginTop: 4,
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#706861',
+  },
+
+  premiumSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#9B928B',
+  },
+
+  premiumLock: {
+    marginTop: 5,
+    fontSize: 18,
+    opacity: 0.55,
+  },
+
+  transitionBanner: {
+    position: 'absolute',
+    top: 35,
+    left: 30,
+    right: 30,
+    alignItems: 'center',
+    backgroundColor: '#FFFDFB',
+    borderRadius: 20,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E9E1DA',
+    elevation: 7,
+  },
+
+  transitionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+
+  transitionNext: {
+    marginTop: 3,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#34313A',
+  },
+
+  levelPanel: {
+    marginHorizontal: 20,
+    marginTop: 4,
+    padding: 20,
+    borderRadius: 26,
+    backgroundColor: '#FFFDFB',
+    borderWidth: 1,
+    borderColor: '#E9E1DA',
+  },
+
+  panelTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  panelTitles: {
     flex: 1,
-    backgroundColor: '#030712',
   },
 
-  scroll: {
+  panelEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+
+  panelTitle: {
+    marginTop: 4,
+    fontSize: 21,
+    fontWeight: '900',
+    color: '#34313A',
+  },
+
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 13,
+  },
+
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+
+  description: {
+    marginTop: 12,
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#706861',
+  },
+
+  beginButton: {
+    marginTop: 18,
+    minHeight: 52,
+    borderRadius: 18,
     paddingHorizontal: 18,
-    paddingTop: 52,
-    paddingBottom: 48,
-  },
-
-  backgroundOrbOne: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(111,80,255,0.08)',
-    top: 120,
-    left: -130,
-  },
-
-  backgroundOrbTwo: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,90,170,0.07)',
-    bottom: 100,
-    right: -100,
-  },
-
-  topBar: {
-    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
 
-  spaceButton: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-
-  spaceButtonText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-
-  subjectTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-
-  subjectIcon: {
-    fontSize: 20,
-  },
-
-  subjectTitle: {
+  beginText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 0.7,
   },
 
-  levelCounter: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  branchRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 18,
-  },
-
-  branchButton: {
-    flex: 1,
-    minHeight: 66,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.14)',
-  },
-
-  branchIcon: {
+  beginArrow: {
     color: '#FFFFFF',
-    fontSize: 21,
-    marginBottom: 3,
-  },
-
-  branchText: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-
-  levelMap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    marginTop: 25,
-    marginBottom: 18,
-    flexWrap: 'wrap',
-  },
-
-  levelDot: {
-    width: 23,
-    height: 23,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  levelDotText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-
-  room: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 28,
-    backgroundColor: 'rgba(3,7,18,0.42)',
-    padding: 20,
-    overflow: 'hidden',
-  },
-
-  stageLabel: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    marginBottom: 8,
-  },
-
-  levelTitle: {
-    color: '#FFFFFF',
-    fontSize: 31,
-    lineHeight: 37,
-    fontWeight: '900',
-  },
-
-  levelSubtitle: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 14,
-    marginTop: 4,
-    marginBottom: 18,
-  },
-
-  musicLessonBox: {
-    marginTop: 16,
-    width: '100%',
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,183,240,0.28)',
-    alignItems: 'center',
-  },
-
-  musicLessonText: {
-    color: '#F5E9F8',
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-
-  musicLessonButton: {
-    minHeight: 44,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,183,240,0.18)',
-    borderWidth: 1,
-    borderColor: '#FFB7F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  rhythmSequence: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-
-  rhythmBeat: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  rhythmBeatActive: {
-    borderColor: '#FFB7F0',
-    backgroundColor: 'rgba(255,183,240,0.24)',
-    transform: [{ scale: 1.08 }],
-  },
-
-  rhythmBeatText: {
-    color: '#FFB7F0',
     fontSize: 24,
-    fontWeight: '900',
-  },
-
-  musicLessonButtonDisabled: {
-    opacity: 0.55,
-  },
-
-  musicSecondaryButton: {
-    minHeight: 44,
-    marginTop: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,183,240,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  musicLessonButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-
-  musicControlRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-
-  musicSpeedButton: {
-    minHeight: 44,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  musicSpeedButtonActive: {
-    borderColor: '#FFB7F0',
-    backgroundColor: 'rgba(255,183,240,0.18)',
-  },
-
-  musicSpeedText: {
-    color: '#FFFFFF',
-    fontSize: 11,
     fontWeight: '800',
   },
 
-  rhythmPattern: {
-    color: '#FFB7F0',
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: 5,
-    marginBottom: 14,
-  },
-
-  melodyNote: {
-    color: '#FFB7F0',
-    fontSize: 25,
-    fontWeight: '900',
-    letterSpacing: 2,
-    marginBottom: 14,
-  },
-
-  visualArea: {
-    minHeight: 190,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-
-
-
-  visualTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 20,
-  },
-
-  visualCaption: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 2,
-    marginTop: 5,
-  },
-
-  lessonBox: {
-    gap: 14,
-    marginBottom: 20,
-  },
-
-  lessonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  lessonBullet: {
-    fontSize: 9,
-    marginTop: 6,
-  },
-
-  lessonText: {
-    flex: 1,
-    color: 'rgba(255,255,255,0.84)',
-    fontSize: 15,
-    lineHeight: 23,
-  },
-
-  experimentBox: {
-    minHeight: 240,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.24)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-
-  experimentObject: {
-    fontSize: 48,
-    fontWeight: '900',
-  },
-
-  experimentTrack: {
-    height: 3,
-    width: '72%',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    marginTop: 26,
-    borderRadius: 3,
-  },
-
-  experimentFill: {
-    height: 3,
-    width: '100%',
-    opacity: 0.35,
-  },
-
-  experimentHint: {
-    color: 'rgba(255,255,255,0.42)',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    marginTop: 22,
-  },
-
-  instructionBox: {
-    borderRadius: 19,
-    padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.065)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
-    marginBottom: 18,
-  },
-
-  instructionTitle: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
-
-  instructionText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 15,
-    lineHeight: 23,
-  },
-
-  gameVisual: {
-    minHeight: 210,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-
-  gameIcon: {
-    fontSize: 62,
-    color: '#FFFFFF',
-  },
-
-  gamePulse: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  gamePulseText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-
-  buildBoard: {
-    minHeight: 210,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-
-  buildBoardTitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 2,
-    marginBottom: 28,
-  },
-
-  buildObjects: {
-    flexDirection: 'row',
-    gap: 20,
-    alignItems: 'center',
-  },
-
-  buildObject: {
-    color: '#FFFFFF',
-    fontSize: 38,
-  },
-
-  missionVisual: {
-    minHeight: 180,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-
-  missionIcon: {
-    color: '#FFFFFF',
-    fontSize: 62,
-  },
-
-  missionSmall: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  lockMessage: {
     marginTop: 18,
-    textAlign: 'center',
-  },
-
-  missionBox: {
-    borderRadius: 20,
-    padding: 18,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
-    marginBottom: 12,
-  },
-
-  missionTitle: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    marginBottom: 9,
-  },
-
-  missionText: {
-    color: 'rgba(255,255,255,0.84)',
-    fontSize: 16,
-    lineHeight: 24,
-  },
-
-  guardianText: {
-    color: 'rgba(255,255,255,0.42)',
-    fontSize: 11,
-    lineHeight: 17,
-    marginBottom: 18,
-  },
-
-  completeBox: {
-    minHeight: 330,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F3EFEC',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
 
-  smallStar: {
-    fontSize: 42,
-    marginBottom: 20,
+  lockMessageIcon: {
+    fontSize: 20,
+    marginRight: 10,
   },
 
-  completeTitle: {
+  lockMessageText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#766E68',
+  },
+
+  doneMessage: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  doneIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     color: '#FFFFFF',
+    textAlign: 'center',
+    textAlignVertical: 'center',
     fontSize: 21,
     fontWeight: '900',
-    textAlign: 'center',
+    marginRight: 10,
   },
 
-  completeText: {
-    color: 'rgba(255,255,255,0.66)',
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-    marginTop: 10,
-    maxWidth: 330,
-    marginBottom: 26,
-  },
-
-  actionButton: {
-    minHeight: 54,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    marginTop: 2,
-  },
-
-  actionButtonText: {
-    color: '#090A14',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-
-  footer: {
-    paddingVertical: 22,
-    alignItems: 'center',
-  },
-
-  footerText: {
-    color: 'rgba(255,255,255,0.32)',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-
-  center: {
+  doneMessageText: {
     flex: 1,
-    backgroundColor: '#030712',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 25,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#766E68',
   },
 
-  errorText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-
-  backButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 15,
-    backgroundColor: '#FFFFFF',
-  },
-
-  backText: {
-    color: '#080914',
-    fontWeight: '900',
+  bottomSpace: {
+    height: 30,
   },
 });

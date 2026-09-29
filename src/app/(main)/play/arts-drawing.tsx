@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   PanResponder,
   Pressable,
@@ -432,8 +433,23 @@ function GuideShape({
 }
 
 export default function ArtsDrawingScreen() {
+  const router = useRouter();
+
+  const params =
+    useLocalSearchParams<{
+      level?: string;
+    }>();
+
+  const requestedLevel = Math.max(
+    1,
+    Math.min(
+      LEVELS.length,
+      Number(params.level ?? '1'),
+    ),
+  );
+
   const [levelIndex, setLevelIndex] =
-    useState(0);
+    useState(requestedLevel - 1);
 
   /*
    * IMPORTANT:
@@ -794,6 +810,12 @@ export default function ArtsDrawingScreen() {
         );
 
         clearCurrentDrawing();
+
+        setTimeout(() => {
+          router.replace(
+            `/games/arts?completed=${currentLevel.level}`,
+          );
+        }, 900);
 
         return;
       }
@@ -1574,40 +1596,19 @@ export default function ArtsDrawingScreen() {
 
           {phase ===
             'complete' && (
-            <Pressable
-              onPress={
-                nextLevel
+            <View
+              style={
+                styles.primaryButton
               }
-              disabled={
-                !completed[
-                  currentLevel.level
-                ] ||
-                levelIndex >=
-                  LEVELS.length -
-                    1
-              }
-              style={[
-                styles.primaryButton,
-                (levelIndex >=
-                  LEVELS.length -
-                    1 ||
-                  !completed[
-                    currentLevel.level
-                  ]) &&
-                  styles.primaryDisabled,
-              ]}
             >
               <Text
                 style={
                   styles.primaryText
                 }
               >
-                {levelIndex >=
-                LEVELS.length - 1
-                  ? 'MASTERED'
-                  : 'NEXT LEVEL'}
+                RETURNING TO JOURNEY...
               </Text>
-            </Pressable>
+            </View>
           )}
         </View>
       </View>

@@ -1,5 +1,8 @@
 import { GLView } from 'expo-gl';
-import { useRouter } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
@@ -1050,8 +1053,18 @@ function getTargetsForMission(
 export default function ManufacturingScreen() {
   const router = useRouter();
 
-  const [missionIndex, setMissionIndex] =
-    useState(0);
+  const params =
+    useLocalSearchParams<{
+      level?: string;
+    }>();
+
+  const requestedLevel = Math.max(
+    1,
+    Math.min(
+      5,
+      Number(params.level ?? '1'),
+    ),
+  );
 
   const [placed, setPlaced] =
     useState<
@@ -1093,7 +1106,7 @@ export default function ManufacturingScreen() {
     >({});
 
   const missionRef =
-    useRef(0);
+    useRef(requestedLevel - 1);
 
   const runningRef =
     useRef(false);
@@ -1544,21 +1557,19 @@ export default function ManufacturingScreen() {
       setMessage(
         'WATCH THE MACHINE MOVE!',
       );
-    };
 
-  const chooseMission =
-    (index: number) => {
-      missionRef.current =
-        index;
+      setTimeout(() => {
+        runningRef.current = false;
+        setRunning(false);
 
-      setMissionIndex(index);
+        setMessage(
+          'MACHINE WORKS! LEVEL COMPLETE ⭐',
+        );
 
-      const scene =
-        sceneRef.current;
-
-      if (scene) {
-        rebuildScene(scene);
-      }
+        router.replace(
+          `/games/manufacturing?completed=${requestedLevel}`,
+        );
+      }, 3000);
     };
 
   const reset =
@@ -1821,7 +1832,7 @@ export default function ManufacturingScreen() {
   }, []);
 
   const mission =
-    MISSIONS[missionIndex];
+    MISSIONS[missionRef.current];
 
   const allPlaced =
     mission.parts.every(
@@ -1860,12 +1871,6 @@ export default function ManufacturingScreen() {
 
             <View>
               <Text
-                style={styles.eyebrow}
-              >
-                TECH · LEVEL {missionIndex + 1}
-              </Text>
-
-              <Text
                 style={styles.title}
               >
                 {mission.title}
@@ -1887,38 +1892,6 @@ export default function ManufacturingScreen() {
               RESET
             </Text>
           </Pressable>
-        </View>
-
-        <View
-          style={styles.levels}
-        >
-          {MISSIONS.map(
-            (item, index) => (
-              <Pressable
-                key={item.title}
-                onPress={() =>
-                  chooseMission(index)
-                }
-                style={[
-                  styles.level,
-                  index ===
-                    missionIndex &&
-                    styles.levelActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.levelText,
-                    index ===
-                      missionIndex &&
-                      styles.levelTextActive,
-                  ]}
-                >
-                  {index + 1}
-                </Text>
-              </Pressable>
-            ),
-          )}
         </View>
 
         <View

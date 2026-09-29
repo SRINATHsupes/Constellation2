@@ -2,6 +2,7 @@ import { GLView } from 'expo-gl';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -12,7 +13,8 @@ import * as THREE from 'three';
 
 type SubjectId =
   | 'vedic'
-  | 'arts';
+  | 'arts'
+  | 'tech';
 
 type Subject = {
   id: SubjectId;
@@ -48,6 +50,13 @@ const SUBJECTS: Subject[] = [
     color: '#FFB7C5',
     position: [3.0, -1.2, 0.3],
   },
+  {
+    id: 'tech',
+    title: 'TECH',
+    subtitle: 'Build · Machines · Invent',
+    color: '#BFD9F2',
+    position: [3.0, 1.2, 0.1],
+  },
 ];
 
 const DISCOVERIES: Discovery[] = [
@@ -72,6 +81,17 @@ const DISCOVERIES: Discovery[] = [
     position: [3.0, -1.2, 0.3],
     unlocked: true,
   },
+
+  {
+    id: 'tech-build',
+    subjectId: 'tech',
+    title: 'TECH',
+    subtitle: 'Build · Machines · Invent',
+    route: '/play/manufacturing',
+    color: '#BFD9F2',
+    position: [3.0, 1.2, 0.1],
+    unlocked: true,
+  },
 ];
 
 
@@ -93,6 +113,7 @@ const CONSTELLATION_CENTERS: Record<
 > = {
   vedic: [-4.2, 2.2, 0],
   arts: [-4.2, -2.4, 0.3],
+  tech: [3.6, 2.0, 0.1],
 };
 
 /*
@@ -128,6 +149,15 @@ const CONSTELLATION_PATTERNS: Record<
     [1.8, 0.4, 0.1],
     [0.7, -1.5, 0],
     [-1.2, -1.3, 0.2],
+  ],
+
+  tech: [
+    [0, 1.7, 0],
+    [-1.5, 0.7, 0.15],
+    [1.5, 0.7, -0.1],
+    [-1.2, -0.9, 0.2],
+    [1.2, -0.9, -0.15],
+    [0, -1.7, 0.05],
   ],
 
 
@@ -682,11 +712,196 @@ function createDiscoveryStructure(
     case 'arts':
       return createDrawingStructure(discovery);
 
+    case 'tech':
+      return createManufacturingStructure(discovery);
+
     default:
       return createVedicStructure(discovery, index);
   }
 }
 
+
+type CreativeStarProps = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  onMove: (id: string, x: number, y: number) => void;
+};
+
+function CreativeStar({
+  id,
+  x,
+  y,
+  width,
+  height,
+  color,
+  onMove,
+}: CreativeStarProps) {
+  const startRef = useRef({
+    x,
+    y,
+    touchX: 0,
+    touchY: 0,
+  });
+
+  const twinkle = useRef(
+    new Animated.Value(0.7),
+  ).current;
+
+  useEffect(() => {
+    const index = Number(
+      id.replace('creative-star-', ''),
+    );
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 160),
+
+        Animated.timing(twinkle, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(twinkle, {
+          toValue: 0.35,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(twinkle, {
+          toValue: 0.72,
+          duration: 550,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [id, twinkle]);
+
+  const responder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+
+        onMoveShouldSetPanResponder: () => true,
+
+        onPanResponderGrant: (event) => {
+          startRef.current = {
+            x,
+            y,
+            touchX: event.nativeEvent.pageX,
+            touchY: event.nativeEvent.pageY,
+          };
+        },
+
+        onPanResponderMove: (event) => {
+          if (width <= 0 || height <= 0) {
+            return;
+          }
+
+          const dx =
+            event.nativeEvent.pageX -
+            startRef.current.touchX;
+
+          const dy =
+            event.nativeEvent.pageY -
+            startRef.current.touchY;
+
+          const nextX =
+            startRef.current.x +
+            (dx / width) * 100;
+
+          const nextY =
+            startRef.current.y +
+            (dy / height) * 100;
+
+          onMove(
+            id,
+            Math.max(5, Math.min(95, nextX)),
+            Math.max(12, Math.min(88, nextY)),
+          );
+        },
+      }),
+    [height, id, onMove, width, x, y],
+  );
+
+  const diamondScale = twinkle.interpolate({
+    inputRange: [0.35, 1],
+    outputRange: [0.82, 1.18],
+  });
+
+  const glowScale = twinkle.interpolate({
+    inputRange: [0.35, 1],
+    outputRange: [0.75, 1.35],
+  });
+
+  return (
+    <View
+      style={[
+        styles.creativeStar,
+        {
+          left: `${x}%`,
+          top: `${y}%`,
+        },
+      ]}
+      {...responder.panHandlers}
+      accessibilityRole="button"
+      accessibilityLabel="Creative star"
+    >
+      <Animated.View
+        style={[
+          styles.creativeStarGlow,
+          {
+            backgroundColor: `${color}35`,
+            opacity: twinkle,
+            transform: [
+              {
+                scale: glowScale,
+              },
+            ],
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.creativeStarDiamond,
+          {
+            backgroundColor: color,
+            shadowColor: color,
+            opacity: twinkle,
+            transform: [
+              {
+                rotate: '45deg',
+              },
+              {
+                scale: diamondScale,
+              },
+            ],
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.creativeStarSpark,
+          {
+            opacity: twinkle,
+          },
+        ]}
+      />
+    </View>
+  );
+}
 export function ConstellationUniverse3D() {
   const router = useRouter();
 
@@ -704,6 +919,12 @@ export function ConstellationUniverse3D() {
 
   const structuresRef = useRef<THREE.Group[]>([]);
 
+  const constellationNodesRef =
+    useRef<THREE.Mesh[]>([]);
+
+  const draggingNodeRef =
+    useRef<THREE.Mesh | null>(null);
+
   const [screenTargets, setScreenTargets] = useState<
     {
       id: string;
@@ -713,12 +934,34 @@ export function ConstellationUniverse3D() {
     }[]
   >([]);
 
+  const [freeStars, setFreeStars] = useState<
+    {
+      id: string;
+      x: number;
+      y: number;
+    }[]
+  >(() => {
+    const stars = [
+      [49.1, 49.0],
+      [50.9, 49.1],
+      [48.8, 50.5],
+      [51.2, 50.4],
+      [49.2, 51.3],
+      [50.8, 51.5],
+      [50.0, 48.4],
+    ];
+
+    return stars.map(([x, y], index) => ({
+      id: `creative-star-${index}`,
+      x,
+      y,
+    }));
+  });
+
   const screenSizeRef = useRef({
     width: 0,
     height: 0,
   });
-
-  const touchStartRef = useRef({ x: 0, y: 0 });
 
   const rotationRef = useRef({
     x: 0,
@@ -730,6 +973,38 @@ export function ConstellationUniverse3D() {
   useEffect(() => {
     selectedRef.current = selectedDiscovery;
   }, [selectedDiscovery]);
+
+  const creativeStarColors = [
+    '#DCCBFF',
+    '#FFD1DC',
+    '#BFE8FF',
+    '#C8F0D8',
+    '#FFE2A8',
+    '#F6C7E8',
+    '#C9D7FF',
+    '#D8F0C2',
+    '#FFD0B5',
+    '#C8E8F2',
+    '#E3C7FF',
+    '#F5D6A6',
+  ];
+
+  const moveCreativeStar = React.useCallback(
+    (id: string, x: number, y: number) => {
+      setFreeStars((current) =>
+        current.map((star) =>
+          star.id === id
+            ? {
+                ...star,
+                x,
+                y,
+              }
+            : star,
+        ),
+      );
+    },
+    [],
+  );
 
   const selectDiscovery = (discoveryId: string) => {
     const discovery = DISCOVERIES.find(
@@ -747,37 +1022,112 @@ export function ConstellationUniverse3D() {
   // eslint-disable-next-line react-hooks/refs
   const [panResponder] = useState(() =>
     PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => true,
 
-        onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
 
-        onPanResponderGrant: (event) => {
-          touchStartRef.current = {
-            x: event.nativeEvent.pageX,
-            y: event.nativeEvent.pageY,
-          };
-        },
+      onPanResponderGrant: (event) => {
+        const camera = cameraRef.current;
+        const width = screenSizeRef.current.width;
+        const height = screenSizeRef.current.height;
 
-        onPanResponderMove: (event, gesture) => {
-          if (
-            Math.abs(gesture.dx) > 2 ||
-            Math.abs(gesture.dy) > 2
-          ) {
-            rotationRef.current.y += gesture.dx * 0.004;
-            rotationRef.current.x += gesture.dy * 0.004;
+        draggingNodeRef.current = null;
 
-            rotationRef.current.x = Math.max(
-              -0.8,
-              Math.min(0.8, rotationRef.current.x),
-            );
+        if (
+          !camera ||
+          width <= 0 ||
+          height <= 0
+        ) {
+          return;
+        }
+
+        const pointer = new THREE.Vector2(
+          (event.nativeEvent.locationX / width) * 2 - 1,
+          -(event.nativeEvent.locationY / height) * 2 + 1,
+        );
+
+        const raycaster = new THREE.Raycaster();
+
+        raycaster.setFromCamera(
+          pointer,
+          camera,
+        );
+
+        const hits =
+          raycaster.intersectObjects(
+            constellationNodesRef.current,
+            false,
+          );
+
+        const hit = hits.find(
+          (item) =>
+            item.object.userData.constellationNode &&
+            item.object.userData.draggable,
+        );
+
+        if (hit) {
+          draggingNodeRef.current =
+            hit.object as THREE.Mesh;
+        }
+      },
+
+      onPanResponderMove: (_event, gesture) => {
+        const node = draggingNodeRef.current;
+
+        if (node) {
+          const camera = cameraRef.current;
+          const height = screenSizeRef.current.height;
+
+          if (camera && height > 0) {
+            const depth = 10;
+
+            const worldHeight =
+              2 *
+              Math.tan(
+                THREE.MathUtils.degToRad(
+                  camera.fov,
+                ) / 2,
+              ) *
+              depth;
+
+            const worldPerPixel =
+              worldHeight / height;
+
+            node.position.x +=
+              gesture.dx * worldPerPixel * 0.65;
+
+            node.position.y -=
+              gesture.dy * worldPerPixel * 0.65;
           }
-        },
 
-        onPanResponderRelease: () => {
-          // Star selection is handled by the transparent
-          // React Native Pressable buttons above the 3D world.
-        },
-      }),
+          return;
+        }
+
+        if (
+          Math.abs(gesture.dx) > 2 ||
+          Math.abs(gesture.dy) > 2
+        ) {
+          rotationRef.current.y +=
+            gesture.dx * 0.004;
+
+          rotationRef.current.x +=
+            gesture.dy * 0.004;
+
+          rotationRef.current.x = Math.max(
+            -0.8,
+            Math.min(0.8, rotationRef.current.x),
+          );
+        }
+      },
+
+      onPanResponderRelease: () => {
+        draggingNodeRef.current = null;
+      },
+
+      onPanResponderTerminate: () => {
+        draggingNodeRef.current = null;
+      },
+    }),
   );
 
   useEffect(() => {
@@ -848,12 +1198,17 @@ export function ConstellationUniverse3D() {
 
   const openLesson = () => {
     if (selectedDiscovery.subjectId === 'vedic') {
-      router.push('/play/vedic-escape');
+      router.push('/games/vedic');
       return;
     }
 
     if (selectedDiscovery.subjectId === 'arts') {
-      router.push('/play/arts-drawing');
+      router.push('/games/arts');
+      return;
+    }
+
+    if (selectedDiscovery.subjectId === 'tech') {
+      router.push('/games/manufacturing');
       return;
     }
   };
@@ -1014,14 +1369,47 @@ export function ConstellationUniverse3D() {
         [-4.2, -3.7, 0.2],
       ],
 
-    
-    
-    
-        };
+      tech: [
+        [3.5, 2.0, 0.1],
+        [2.5, 2.9, -0.2],
+        [4.7, 2.8, 0.15],
+        [2.3, 1.1, 0],
+        [4.8, 1.0, -0.2],
+        [3.5, 0.2, 0.1],
+      ],
+    };
 
     const subjectColors: Record<SubjectId, string> = {
-      vedic: '#FFD166',
-      arts: '#FF75B8',
+      vedic: '#E8DFFF',
+      arts: '#FFDCE8',
+      tech: '#BFD9F2',
+    };
+
+    const nodeColors: Record<SubjectId, string[]> = {
+      vedic: [
+        '#FFFFFF',
+        '#E8DFFF',
+        '#DDEBFF',
+        '#FFFFFF',
+        '#FFF0C7',
+        '#FFFFFF',
+      ],
+      arts: [
+        '#FFFFFF',
+        '#FFDCE8',
+        '#FFF0C7',
+        '#FFFFFF',
+        '#E6F5EC',
+        '#FFFFFF',
+      ],
+      tech: [
+        '#FFFFFF',
+        '#BFD9F2',
+        '#E8DFFF',
+        '#FFFFFF',
+        '#F2C96D',
+        '#FFFFFF',
+      ],
     };
 
     Object.entries(constellationLayouts).forEach(
@@ -1035,16 +1423,23 @@ export function ConstellationUniverse3D() {
 
           const node = new THREE.Mesh(
             new THREE.SphereGeometry(
-              isCenter ? 0.18 : 0.10,
-              16,
-              16,
+              isCenter ? 0.18 : 0.045,
+              12,
+              12,
             ),
             new THREE.MeshBasicMaterial({
-              color,
+              color: isCenter
+                ? color
+                : nodeColors[subjectId as SubjectId][index],
               transparent: true,
-              opacity: isCenter ? 0.95 : 0.7,
+              opacity: isCenter ? 0.95 : 0.92,
             }),
           );
+
+          node.userData.constellationNode = true;
+          node.userData.subjectId = subjectId;
+          node.userData.nodeIndex = index;
+          node.userData.draggable = !isCenter;
 
           node.position.set(
             point[0],
@@ -1054,6 +1449,7 @@ export function ConstellationUniverse3D() {
 
           constellationGroup.add(node);
           constellationNodes.push(node);
+          constellationNodesRef.current.push(node);
         });
 
         for (
@@ -1195,24 +1591,7 @@ export function ConstellationUniverse3D() {
             : pulse,
         );
 
-        /*
-         * Physics orbit rings
-         */
-        if (false) {
-          structure.children.forEach((child) => {
-            if (child.userData.orbit) {
-              child.rotation.z += 0.008;
-            }
-          });
-        }
 
-        /*
-         * Selected object gets stronger
-         * rotation.
-         */
-        if (selected) {
-          structure.rotation.z += 0.003;
-        }
       });
 
       centerRing1.rotation.z = time * 0.02;
@@ -1250,6 +1629,7 @@ export function ConstellationUniverse3D() {
       <GLView
         style={styles.glView}
         onContextCreate={onContextCreate}
+        {...panResponder.panHandlers}
       />
 
       <View
@@ -1290,9 +1670,104 @@ export function ConstellationUniverse3D() {
       </View>
 
       <View
-        style={styles.touchLayer}
-        {...panResponder.panHandlers}
-      />
+        pointerEvents="box-none"
+        style={styles.freeStarLayer}
+      >
+        {freeStars.map((star) => (
+          <CreativeStar
+            key={star.id}
+            id={star.id}
+            x={star.x}
+            y={star.y}
+            width={screenSizeRef.current.width}
+            height={screenSizeRef.current.height}
+            color={
+              creativeStarColors[
+                Number(
+                  star.id.replace('creative-star-', ''),
+                ) % creativeStarColors.length
+              ]
+            }
+            onMove={moveCreativeStar}
+          />
+        ))}
+
+        {freeStars.map((star, index) => (
+          <View
+            key={`pleiades-name-${star.id}`}
+            pointerEvents="none"
+            style={[
+              styles.srName,
+              {
+                left: `${star.x}%`,
+                top: `${star.y}%`,
+                transform: [
+                  {
+                    translateX:
+                      index % 2 === 0 ? -30 : -24,
+                  },
+                  {
+                    translateY:
+                      index < 2 ? -17 : 9,
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.srNameText}>
+              {
+                [
+                  'VASHISTHA',
+                  'MARICHI',
+                  'PULASTYA',
+                  'PULAHA',
+                  'ATRI',
+                  'ANGIRAS',
+                  'KRATU',
+                ][index]
+              }
+            </Text>
+          </View>
+        ))}
+
+        {freeStars.map((star, index) => (
+          <View
+            key={`sr-name-${star.id}`}
+            pointerEvents="none"
+            style={[
+              styles.srName,
+              {
+                left: `${star.x}%`,
+                top: `${star.y}%`,
+                transform: [
+                  {
+                    translateX:
+                      index % 2 === 0 ? -30 : -24,
+                  },
+                  {
+                    translateY:
+                      index < 2 ? -17 : 9,
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.srNameText}>
+              {
+                [
+                  'VASHISTHA',
+                  'MARICHI',
+                  'PULASTYA',
+                  'PULAHA',
+                  'ATRI',
+                  'ANGIRAS',
+                  'KRATU',
+                ][index]
+              }
+            </Text>
+          </View>
+        ))}
+      </View>
 
       <View
         pointerEvents="box-none"
@@ -1432,6 +1907,65 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
 
+  freeStarLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 25,
+  },
+
+  creativeStar: {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    marginLeft: -9,
+    marginTop: -9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  creativeStarGlow: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+
+  creativeStarDiamond: {
+    width: 3,
+    height: 3,
+    borderRadius: 1,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  creativeStarSpark: {
+    position: 'absolute',
+    width: 1.5,
+    height: 1.5,
+    borderRadius: 1,
+    backgroundColor: '#FFFFFF',
+  },
+
+  srName: {
+    position: 'absolute',
+    zIndex: 27,
+    minWidth: 55,
+    alignItems: 'center',
+  },
+
+  srNameText: {
+    fontSize: 5,
+    letterSpacing: 0.7,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    opacity: 0.72,
+  },
+
+
   topInfo: {
     position: 'absolute',
     top: 38,
@@ -1492,7 +2026,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     marginRight: 12,
     shadowOpacity: 0.8,
-    shadowRadius: 10,
+    shadowRadius: 6,
   },
 
   selectionTextBox: {
